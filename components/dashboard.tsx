@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -22,6 +23,9 @@ import { ACTIVE_ACCOUNT_KEY, getActiveAccount, restoreAccountProfile, saveAccoun
 import { getDailyQuests, QuestAction } from "@/components/daily-quests";
 import DailyQuestList from "@/components/daily-quest-list";
 import TacticalMap from "@/components/tactical-map";
+import type { WorldMapAction } from "@/components/world-map-view";
+
+const WorldMapView = dynamic(() => import("@/components/world-map-view"), { ssr: false });
 
 type LeaderboardEntry = {
   username: string;
@@ -109,6 +113,7 @@ export default function Dashboard() {
   const [player, setPlayer] = useState<PlayerProfile | null>(null);
   const [notice, setNotice] = useState("");
   const [now, setNow] = useState(0);
+  const [activeView, setActiveView] = useState<"command" | "world">("command");
 
   useEffect(() => {
     const account = getActiveAccount();
@@ -177,11 +182,12 @@ export default function Dashboard() {
     router.replace("/");
   }, [router]);
 
-  function workForCity() {
+  function workForCity(targetCountry = player?.targetCountry, targetCity = player?.targetCity) {
     if (!player || secondsUntil(player.lastWorkAt, WORK_COOLDOWN_MS, now) > 0) return;
+    const operationPlayer = { ...player, targetCountry: targetCountry ?? player.targetCountry, targetCity: targetCity ?? player.targetCity };
     const reward = player.role === "Businessman" ? 30 : 20;
     const xp = player.xp + 10;
-    const { key, ledger } = withTargetLedger(player);
+    const { key, ledger } = withTargetLedger(operationPlayer);
     const base = {
       ...player,
       gold: player.gold + reward,
@@ -190,18 +196,19 @@ export default function Dashboard() {
       lastWorkAt: now,
       cityLedger: { ...player.cityLedger, [key]: { ...ledger, treasury: ledger.treasury + reward } },
     };
-    const result = progressQuests(base, "work");
+    const result = progressQuests({ ...base, targetCountry: operationPlayer.targetCountry, targetCity: operationPlayer.targetCity }, "work");
     setPlayer(result.player);
-    setNotice(`+${reward} gold and +10 XP to ${player.targetCity}.${result.rewardGold ? ` Quest reward: +${result.rewardGold} gold, +${result.rewardXp} XP.` : ""}`);
+    setNotice(`+${reward} gold and +10 XP to ${operationPlayer.targetCity}.${result.rewardGold ? ` Quest reward: +${result.rewardGold} gold, +${result.rewardXp} XP.` : ""}`);
     playActionFeedback(getLevelProgress(result.player.xp).level > getLevelProgress(player.xp).level);
   }
 
-  function train() {
+  function train(targetCountry = player?.targetCountry, targetCity = player?.targetCity) {
     if (!player || player.energy < 10 || secondsUntil(player.lastTrainAt, TRAIN_COOLDOWN_MS, now) > 0) return;
+    const operationPlayer = { ...player, targetCountry: targetCountry ?? player.targetCountry, targetCity: targetCity ?? player.targetCity };
     const powerGain = player.role === "Commander" ? 4 : 2;
     const xp = player.xp + 15;
-    const { key, ledger } = withTargetLedger(player);
-    const isHomeCity = player.targetCity === player.city && player.targetCountry === player.country;
+    const { key, ledger } = withTargetLedger(operationPlayer);
+    const isHomeCity = operationPlayer.targetCity === player.city && operationPlayer.targetCountry === player.country;
     const base: PlayerProfile = {
       ...player,
       energy: player.energy - 10,
@@ -210,11 +217,13 @@ export default function Dashboard() {
       power: player.power + powerGain,
       lastTrainAt: now,
       lastEnergyRegenAt: now,
+      targetCountry: operationPlayer.targetCountry,
+      targetCity: operationPlayer.targetCity,
       cityLedger: isHomeCity ? player.cityLedger : { ...player.cityLedger, [key]: { ...ledger, defense: Math.max(0, ledger.defense - powerGain) } },
     };
     const result = progressQuests(base, "train");
     setPlayer(result.player);
-    setNotice(isHomeCity ? `Training complete: +15 XP and +${powerGain} power.` : `Operation against ${player.targetCity}: +15 XP, +${powerGain} power; defense disrupted by ${powerGain}.`);
+    setNotice(isHomeCity ? `Training complete: +15 XP and +${powerGain} power.` : `Operation against ${operationPlayer.targetCity}: +15 XP, +${powerGain} power; defense disrupted by ${powerGain}.`);
     playActionFeedback(getLevelProgress(result.player.xp).level > getLevelProgress(player.xp).level);
   }
 
@@ -299,6 +308,32 @@ export default function Dashboard() {
     if ("vibrate" in navigator) navigator.vibrate(12);
   }
 
+  function executeMapAction(country: string, city: string, action: WorldMapAction) {
+    if (!player) return;
+    if (action === "work") {
+      workForCity(country, city);
+      return;
+    }
+    if (action === "attack") {
+      if (country === player.country && city === player.city) {
+        setNotice("That is your home base. Select another city to launch an attack.");
+        return;
+      }
+      train(country, city);
+      return;
+    }
+    if (country === player.country && city === player.city) {
+      setNotice("Select another city to gather enemy intelligence.");
+      return;
+    }
+    const xp = player.xp;
+    const base = { ...player, targetCountry: country, targetCity: city, intel: player.intel + 10 };
+    const result = progressQuests(base, "intel", 10);
+    setPlayer(result.player);
+    setNotice(`Gathered 10 intel on ${city}.${result.rewardGold ? ` Quest reward: +${result.rewardGold} gold, +${result.rewardXp} XP.` : ""}`);
+    playActionFeedback(getLevelProgress(result.player.xp).level > getLevelProgress(xp).level);
+  }
+
   if (!player) {
     return <main className="grid min-h-screen place-items-center bg-ink text-sm uppercase tracking-[0.16em] text-muted">Loading profile...</main>;
   }
@@ -331,6 +366,17 @@ export default function Dashboard() {
           <div className="dashboard-emblem-copy"><p className="tactical-kicker">Global operations / live theater</p><p className="mt-2 font-display text-2xl sm:text-4xl">Represent your city.</p><p className="mt-1 text-[10px] uppercase tracking-[0.16em] text-muted">Hold ground. Build influence. Shape the map.</p></div>
         </div>
 
+        <nav className="dashboard-nav mt-4" aria-label="Dashboard views">
+          <button type="button" className={`dashboard-nav-tab ${activeView === "command" ? "dashboard-nav-active" : ""}`} aria-pressed={activeView === "command"} onClick={() => setActiveView("command")}>Command Overview</button>
+          <button type="button" className={`dashboard-nav-tab ${activeView === "world" ? "dashboard-nav-active" : ""}`} aria-pressed={activeView === "world"} onClick={() => setActiveView("world")}>◎ World Map View</button>
+        </nav>
+
+        {activeView === "world" ? (
+          <section className="world-map-page mt-4 flex flex-1 flex-col">
+            <WorldMapView player={player} onAction={executeMapAction} />
+            <p aria-live="polite" className="min-h-6 pt-2 text-sm text-signal">{notice}</p>
+          </section>
+        ) : (
         <section className="flex flex-1 flex-col py-8 sm:py-12">
           <div className="flex flex-col justify-between gap-6 border-b border-line pb-7 sm:flex-row sm:items-end">
             <div className="animate-rise">
@@ -361,12 +407,12 @@ export default function Dashboard() {
             <section aria-labelledby="actions-heading" className="animate-rise" style={{ animationDelay: "160ms" }}>
               <div className="mb-3 flex items-center justify-between"><h2 id="actions-heading" className="text-xs font-bold uppercase tracking-[0.2em]">Available operations</h2><span className="text-[10px] uppercase tracking-[0.14em] text-muted">Energy restores +5 / 10 sec</span></div>
               <div className="grid gap-3 sm:grid-cols-2">
-                <button type="button" onClick={workForCity} disabled={workRemaining > 0} className="action-tile group text-left disabled:cursor-not-allowed disabled:opacity-65">
+                <button type="button" onClick={() => workForCity()} disabled={workRemaining > 0} className="action-tile group text-left disabled:cursor-not-allowed disabled:opacity-65">
                   <span className="flex items-center justify-between"><span className="text-[10px] uppercase tracking-[0.16em] text-economy">⛏ Economy / +{player.role === "Businessman" ? 30 : 20} gold</span><span aria-hidden="true" className="text-xl">→</span></span>
                   <span className="mt-8 block font-display text-2xl">Work for City</span>
                   <span className="mt-2 block text-xs text-muted">{workRemaining > 0 ? `Available in ${formatCooldown(workRemaining)}` : `Earn gold for ${player.targetCity}`}</span>
                 </button>
-                <button type="button" onClick={train} disabled={trainRemaining > 0 || player.energy < 10} className="action-tile group text-left disabled:cursor-not-allowed disabled:opacity-65">
+                <button type="button" onClick={() => train()} disabled={trainRemaining > 0 || player.energy < 10} className="action-tile group text-left disabled:cursor-not-allowed disabled:opacity-65">
                   <span className="flex items-center justify-between"><span className="text-[10px] uppercase tracking-[0.16em] text-war">⚔ {targetIsEnemy ? "Attack operation" : "Training operation"} / -10 energy</span><span aria-hidden="true" className="text-xl">→</span></span>
                   <span className="mt-8 block font-display text-2xl">Attack / Train</span>
                   <span className="mt-2 block text-xs text-muted">{trainRemaining > 0 ? `Available in ${formatCooldown(trainRemaining)}` : player.energy < 10 ? "Recover energy to train" : `Target: ${player.targetCity} · +15 XP and power`}</span>
@@ -395,6 +441,7 @@ export default function Dashboard() {
           </div>
           <div className="mt-auto pt-8 text-[10px] uppercase tracking-[0.16em] text-muted">City first. The rest is history.</div>
         </section>
+        )}
       </div>
     </main>
   );
