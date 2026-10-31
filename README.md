@@ -11,7 +11,9 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Create a representative profile, then use the dashboard. The profile is saved in browser `localStorage`; it is not shared across browsers or devices. The city-work and neighbor-attack actions are interface placeholders.
+Open [http://localhost:3000](http://localhost:3000). Choose a role and city, then use the dashboard to work for gold or train for XP and power. Work has a 60-second cooldown; training has a 30-second cooldown and uses 10 energy. Energy restores by 5 every 10 seconds, up to 100. Businessmen earn an extra 10 gold per work action, and Commanders gain extra power when training.
+
+Profile stats, action cooldown timestamps, and energy recovery progress are saved in browser `localStorage`; they are not shared across browsers or devices. City defense, citizen counts, and other leaderboard representatives are deterministic demo data. There is no backend or live multiplayer sync in this MVP.
 
 ## Push to GitHub and deploy on Vercel
 

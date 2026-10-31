@@ -53,6 +53,13 @@ button, input, select { font: inherit; }
 .field-input:focus { border-color: #d8ff55; }
 .field-input option { background: #171b17; }
 
+.stat-label {
+  color: #a4aaa0;
+  font-size: 0.6rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
 .action-tile {
   min-height: 12.5rem;
   border: 1px solid #303830;
@@ -63,6 +70,94 @@ button, input, select { font: inherit; }
 
 .action-tile:hover { border-color: #d8ff55; background: #1b2118; }
 .action-tile:focus-visible { outline: 2px solid #d8ff55; outline-offset: 3px; }
+
+.app-reveal {
+  min-height: 100vh;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 700ms ease;
+}
+
+.app-reveal-visible { opacity: 1; pointer-events: auto; }
+
+.splash-screen {
+  position: fixed;
+  z-index: 100;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: #080b0b;
+  opacity: 1;
+  transition: opacity 700ms ease;
+}
+
+.splash-screen-fading { opacity: 0; }
+
+.splash-screen::before {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, rgba(47, 126, 112, 0.18), transparent 58%);
+  content: "";
+}
+
+.splash-art-wrap {
+  position: relative;
+  display: grid;
+  width: min(88vw, 1050px);
+  height: min(72vh, 680px);
+  place-items: center;
+  animation: splash-breathe 2.4s ease-in-out infinite;
+}
+
+.splash-art {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 0 34px rgba(79, 255, 198, 0.2));
+}
+
+.splash-fallback {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  text-align: center;
+}
+
+.splash-fallback-mark {
+  display: grid;
+  width: 5rem;
+  height: 5rem;
+  place-items: center;
+  border: 1px solid #d8ff55;
+  color: #d8ff55;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+}
+
+.splash-fallback-title {
+  color: #f1f0e8;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(2.5rem, 8vw, 5rem);
+}
+
+.splash-fallback-caption, .splash-loading-label {
+  color: #a4aaa0;
+  font-size: 0.65rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.splash-loading-label { position: absolute; bottom: max(2rem, env(safe-area-inset-bottom)); }
+
+@keyframes splash-breathe {
+  0%, 100% { transform: scale(0.985); opacity: 0.88; }
+  50% { transform: scale(1.015); opacity: 1; }
+}
 
 .animate-rise { animation: rise-in 550ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
 

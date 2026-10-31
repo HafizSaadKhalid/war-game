@@ -2,7 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CITIES_BY_COUNTRY, PLAYER_STORAGE_KEY, PlayerRole } from "@/components/player";
+import { CITIES_BY_COUNTRY, createPlayerProfile, PLAYER_STORAGE_KEY, PlayerRole, ROLE_OPTIONS } from "@/components/player";
 
 export default function RegistrationForm() {
   const router = useRouter();
@@ -27,7 +27,7 @@ export default function RegistrationForm() {
 
     window.localStorage.setItem(
       PLAYER_STORAGE_KEY,
-      JSON.stringify({ username: cleanUsername, country, city, role, gold: 100, level: 1 }),
+      JSON.stringify(createPlayerProfile({ username: cleanUsername, country, city, role })),
     );
     router.push("/dashboard");
   }
@@ -95,14 +95,12 @@ export default function RegistrationForm() {
               <fieldset>
                 <legend className="field-label">Choose your role</legend>
                 <div className="grid grid-cols-2 gap-3">
-                  {([
-                    { value: "Commander", number: "01", description: "Lead from the front." },
-                    { value: "Politician", number: "02", description: "Shape the agenda." },
-                  ] as const).map((option) => (
+                  {ROLE_OPTIONS.map((option, index) => (
                     <label key={option.value} className={`cursor-pointer border p-3 transition-colors ${role === option.value ? "border-signal bg-signal/5" : "border-line hover:border-muted"}`}>
                       <input className="sr-only" type="radio" name="role" value={option.value} checked={role === option.value} onChange={() => setRole(option.value)} />
-                      <span className="flex items-center justify-between text-sm font-semibold">{option.value}<span className={role === option.value ? "text-signal" : "text-muted"}>{option.number}</span></span>
+                      <span className="flex items-center justify-between gap-2 text-sm font-semibold"><span>{option.icon} {option.value}</span><span className={role === option.value ? "text-signal" : "text-muted"}>{String(index + 1).padStart(2, "0")}</span></span>
                       <span className="mt-2 block text-xs text-muted">{option.description}</span>
+                      <span className="mt-1 block text-[10px] uppercase tracking-[0.1em] text-signal">{option.specialty}</span>
                     </label>
                   ))}
                 </div>
