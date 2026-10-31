@@ -76,10 +76,13 @@ export default function WorldMapView({ player, onAction }: WorldMapViewProps) {
       </div>
       <MapContainer center={[20, 0]} zoom={2} minZoom={2} maxZoom={13} scrollWheelZoom zoomControl className="world-map-canvas">
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
-          url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           subdomains="abcd"
           maxZoom={19}
+          keepBuffer={4}
+          updateWhenIdle
+          updateWhenZooming={false}
         />
         <HomeBaseCenter player={player} />
         {CITY_MARKERS.map((marker) => {

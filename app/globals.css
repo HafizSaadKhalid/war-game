@@ -181,6 +181,7 @@ button, input, select { font: inherit; }
 .world-map-legend { display: flex; flex-wrap: wrap; gap: 0.8rem; color: #a4aaa0; font-size: 0.58rem; letter-spacing: 0.1em; text-transform: uppercase; }
 .world-map-legend span { display: flex; align-items: center; gap: 0.35rem; }
 .world-map-canvas { z-index: 1; width: 100%; min-height: 540px; flex: 1; background: #101714; }
+.world-map-canvas .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) saturate(0.55) brightness(0.78); }
 .world-map-home-label { display: flex; align-items: center; gap: 0.5rem; border-top: 1px solid #303b33; padding: 0.65rem 1rem; color: #bac5bc; font-size: 0.65rem; letter-spacing: 0.1em; text-transform: uppercase; }
 .world-marker-home, .world-marker-city { border: 0; background: transparent; }
 .world-marker-core { position: absolute; top: 50%; left: 50%; width: 9px; height: 9px; border: 1px solid #07100b; border-radius: 50%; background: var(--war-red); box-shadow: 0 0 0 4px rgba(255, 82, 99, 0.18), 0 0 14px var(--war-red); transform: translate(-50%, -50%); }
