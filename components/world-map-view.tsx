@@ -76,9 +76,8 @@ export default function WorldMapView({ player, onAction }: WorldMapViewProps) {
       </div>
       <MapContainer center={[20, 0]} zoom={2} minZoom={2} maxZoom={13} scrollWheelZoom zoomControl className="world-map-canvas">
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          subdomains="abcd"
+          attribution='<a href="https://wikimediafoundation.org/wiki/Maps_Terms_of_Use">Wikimedia maps</a> | Map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>'
+          url="https://maps.wikimedia.org/osm-intl/{z}/{x}/{y}.png"
           maxZoom={19}
           keepBuffer={4}
           updateWhenIdle
