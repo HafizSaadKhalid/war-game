@@ -1,35 +1,85 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CITIES_BY_COUNTRY, createPlayerProfile, PLAYER_STORAGE_KEY, PlayerRole, ROLE_OPTIONS } from "@/components/player";
+import {
+  createSalt,
+  getAccounts,
+  hashPassword,
+  restoreAccountProfile,
+  saveAccounts,
+  setActiveAccount,
+} from "@/components/account-storage";
+import { PLAYER_STORAGE_KEY } from "@/components/player";
+
+type AuthMode = "signup" | "login";
 
 export default function RegistrationForm() {
   const router = useRouter();
+  const [mode, setMode] = useState<AuthMode>("signup");
   const [username, setUsername] = useState("");
-  const [country, setCountry] = useState("");
-  const [city, setCity] = useState("");
-  const [role, setRole] = useState<PlayerRole | "">("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
 
-  function handleCountryChange(value: string) {
-    setCountry(value);
-    setCity("");
-  }
+  useEffect(() => {
+    const activeUsername = window.localStorage.getItem("represent-your-city-active-account");
+    if (!activeUsername) return;
+    const account = getAccounts().find((entry) => entry.username.toLowerCase() === activeUsername.toLowerCase());
+    if (!account) return;
+    const profile = restoreAccountProfile(account);
+    if (profile) {
+      window.localStorage.setItem(PLAYER_STORAGE_KEY, JSON.stringify(profile));
+      router.replace("/dashboard");
+    } else {
+      router.replace("/setup");
+    }
+  }, [router]);
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setError("");
     const cleanUsername = username.trim();
-    if (!cleanUsername || !country || !city || !role) {
-      setError("Complete each field to join the table.");
+    if (cleanUsername.length < 3 || password.length < 8) {
+      setError("Use a username with at least 3 characters and a password with at least 8.");
       return;
     }
 
-    window.localStorage.setItem(
-      PLAYER_STORAGE_KEY,
-      JSON.stringify(createPlayerProfile({ username: cleanUsername, country, city, role })),
-    );
-    router.push("/dashboard");
+    setBusy(true);
+    try {
+      const accounts = getAccounts();
+      const existing = accounts.find((account) => account.username.toLowerCase() === cleanUsername.toLowerCase());
+      if (mode === "signup") {
+        if (existing) {
+          setError("That username already has an account. Log in instead.");
+          return;
+        }
+        const salt = createSalt();
+        const passwordHash = await hashPassword(password, salt);
+        accounts.push({ username: cleanUsername, salt, passwordHash, profile: null });
+        saveAccounts(accounts);
+        setActiveAccount(cleanUsername);
+        router.push("/setup");
+        return;
+      }
+
+      if (!existing || await hashPassword(password, existing.salt) !== existing.passwordHash) {
+        setError("Username or password is incorrect.");
+        return;
+      }
+      setActiveAccount(existing.username);
+      const profile = restoreAccountProfile(existing);
+      if (profile) {
+        window.localStorage.setItem(PLAYER_STORAGE_KEY, JSON.stringify(profile));
+        router.push("/dashboard");
+      } else {
+        router.push("/setup");
+      }
+    } catch {
+      setError("Local sign-in is unavailable in this browser session. Try localhost or HTTPS.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -39,83 +89,39 @@ export default function RegistrationForm() {
         <header className="flex items-center justify-between border-b border-line pb-5">
           <a className="flex items-center gap-3" href="/" aria-label="Represent Your City home">
             <span className="grid h-9 w-9 place-items-center border border-signal text-sm font-bold text-signal">RYC</span>
-            <span className="text-xs font-bold uppercase tracking-[0.18em]">Civic Assembly</span>
+            <span className="text-xs font-bold uppercase tracking-[0.18em]">Global War</span>
           </a>
-          <span className="hidden text-xs uppercase tracking-[0.18em] text-muted sm:block">Global season 01 <span className="ml-2 text-signal">● Live soon</span></span>
+          <span className="hidden text-xs uppercase tracking-[0.18em] text-muted sm:block">Represent your city · Season 01</span>
         </header>
 
         <section className="grid flex-1 items-center gap-12 py-12 lg:grid-cols-[1.05fr_0.95fr] lg:gap-20 lg:py-16">
           <div className="max-w-xl animate-rise">
-            <p className="mb-6 flex items-center gap-3 text-xs font-bold uppercase tracking-[0.22em] text-signal">
-              <span className="h-px w-8 bg-signal" /> Your city. Your stake.
-            </p>
-            <h1 className="font-display text-5xl leading-[0.98] sm:text-6xl lg:text-7xl">
-              The world moves <span className="italic text-signal">from here.</span>
-            </h1>
-            <p className="mt-7 max-w-md text-base leading-7 text-muted sm:text-lg">
-              Claim a seat at the table. Build influence for your city and decide how it meets the world.
-            </p>
+            <p className="mb-6 flex items-center gap-3 text-xs font-bold uppercase tracking-[0.22em] text-signal"><span className="h-px w-8 bg-signal" /> The world moves from here</p>
+            <h1 className="font-display text-5xl leading-[0.98] sm:text-6xl lg:text-7xl">Claim your <span className="italic text-signal">place</span> in history.</h1>
+            <p className="mt-7 max-w-md text-base leading-7 text-muted sm:text-lg">Build a city’s influence, command its strength, and shape the balance of power.</p>
             <div className="mt-12 grid max-w-md grid-cols-3 border-y border-line py-5">
-              <div><p className="font-display text-2xl">01</p><p className="mt-1 text-[10px] uppercase tracking-[0.15em] text-muted">Choose a side</p></div>
-              <div className="border-x border-line px-5"><p className="font-display text-2xl">04</p><p className="mt-1 text-[10px] uppercase tracking-[0.15em] text-muted">Nations</p></div>
+              <div><p className="font-display text-2xl">04</p><p className="mt-1 text-[10px] uppercase tracking-[0.15em] text-muted">Distinct roles</p></div>
+              <div className="border-x border-line px-5"><p className="font-display text-2xl">01</p><p className="mt-1 text-[10px] uppercase tracking-[0.15em] text-muted">Shared world</p></div>
               <div className="pl-5"><p className="font-display text-2xl">∞</p><p className="mt-1 text-[10px] uppercase tracking-[0.15em] text-muted">Possibilities</p></div>
             </div>
           </div>
 
           <div className="animate-rise border border-line bg-panel p-5 shadow-[0_24px_80px_rgba(0,0,0,0.28)] sm:p-8" style={{ animationDelay: "100ms" }}>
-            <div className="mb-7 flex items-start justify-between">
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-signal">New representative</p>
-                <h2 className="mt-2 font-display text-3xl">Take your place</h2>
-              </div>
-              <span className="border border-line px-2 py-1 text-[10px] uppercase tracking-[0.14em] text-muted">01 / 01</span>
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-signal">Player access / 01</p>
+            <h2 className="mt-2 font-display text-3xl">{mode === "signup" ? "Create your account" : "Welcome back"}</h2>
+            <div className="mt-6 grid grid-cols-2 border-b border-line" role="tablist" aria-label="Account access">
+              {(["signup", "login"] as const).map((value) => <button key={value} type="button" role="tab" aria-selected={mode === value} onClick={() => { setMode(value); setError(""); }} className={`border-b-2 px-3 py-3 text-xs font-bold uppercase tracking-[0.15em] transition-colors ${mode === value ? "border-signal text-signal" : "border-transparent text-muted hover:text-paper"}`}>{value === "signup" ? "Sign up" : "Log in"}</button>)}
             </div>
-
-            <form onSubmit={handleSubmit} className="space-y-5">
-              <div>
-                <label htmlFor="username" className="field-label">Username</label>
-                <input id="username" className="field-input" autoComplete="nickname" maxLength={24} placeholder="e.g. citybuilder" value={username} onChange={(event) => setUsername(event.target.value)} required />
-              </div>
-              <div className="grid gap-5 sm:grid-cols-2">
-                <div>
-                  <label htmlFor="country" className="field-label">Country</label>
-                  <select id="country" className="field-input" value={country} onChange={(event) => handleCountryChange(event.target.value)} required>
-                    <option value="" disabled>Select country</option>
-                    {Object.keys(CITIES_BY_COUNTRY).map((name) => <option key={name} value={name}>{name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label htmlFor="city" className="field-label">City</label>
-                  <select id="city" className="field-input disabled:cursor-not-allowed disabled:opacity-50" value={city} onChange={(event) => setCity(event.target.value)} disabled={!country} required>
-                    <option value="" disabled>{country ? "Select city" : "Choose country first"}</option>
-                    {(CITIES_BY_COUNTRY[country] ?? []).map((name) => <option key={name} value={name}>{name}</option>)}
-                  </select>
-                </div>
-              </div>
-              <fieldset>
-                <legend className="field-label">Choose your role</legend>
-                <div className="grid grid-cols-2 gap-3">
-                  {ROLE_OPTIONS.map((option, index) => (
-                    <label key={option.value} className={`cursor-pointer border p-3 transition-colors ${role === option.value ? "border-signal bg-signal/5" : "border-line hover:border-muted"}`}>
-                      <input className="sr-only" type="radio" name="role" value={option.value} checked={role === option.value} onChange={() => setRole(option.value)} />
-                      <span className="flex items-center justify-between gap-2 text-sm font-semibold"><span>{option.icon} {option.value}</span><span className={role === option.value ? "text-signal" : "text-muted"}>{String(index + 1).padStart(2, "0")}</span></span>
-                      <span className="mt-2 block text-xs text-muted">{option.description}</span>
-                      <span className="mt-1 block text-[10px] uppercase tracking-[0.1em] text-signal">{option.specialty}</span>
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
+            <form onSubmit={handleSubmit} className="mt-6 space-y-5">
+              <div><label htmlFor="username" className="field-label">Username</label><input id="username" className="field-input" autoComplete="username" maxLength={24} minLength={3} placeholder="Choose your callsign" value={username} onChange={(event) => setUsername(event.target.value)} required /></div>
+              <div><label htmlFor="password" className="field-label">Password</label><input id="password" className="field-input" type="password" autoComplete={mode === "signup" ? "new-password" : "current-password"} minLength={8} placeholder="At least 8 characters" value={password} onChange={(event) => setPassword(event.target.value)} required /></div>
               {error && <p role="alert" className="text-sm text-rose-300">{error}</p>}
-              <button type="submit" className="group flex w-full items-center justify-between bg-signal px-5 py-4 text-left text-sm font-bold text-ink transition-colors hover:bg-paper focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal">
-                <span>Enter the assembly</span><span aria-hidden="true" className="text-lg transition-transform group-hover:translate-x-1">→</span>
-              </button>
-              <p className="text-center text-[11px] leading-5 text-muted">Your profile is saved on this device. No account or password required.</p>
+              <button type="submit" disabled={busy} className="group flex w-full items-center justify-between bg-signal px-5 py-4 text-left text-sm font-bold text-ink transition-colors hover:bg-paper disabled:cursor-wait disabled:opacity-70"><span>{busy ? "Securing access..." : mode === "signup" ? "Create account" : "Log in"}</span><span aria-hidden="true" className="text-lg transition-transform group-hover:translate-x-1">→</span></button>
+              <p className="text-center text-[11px] leading-5 text-muted">Credentials and game data stay in this browser. Use a unique password.</p>
             </form>
           </div>
         </section>
-        <footer className="flex justify-between border-t border-line pt-4 text-[10px] uppercase tracking-[0.16em] text-muted">
-          <span>Represent Your City</span><span>Diplomacy is a local affair</span>
-        </footer>
+        <footer className="flex justify-between border-t border-line pt-4 text-[10px] uppercase tracking-[0.16em] text-muted"><span>Global War</span><span>Diplomacy is a local affair</span></footer>
       </div>
     </main>
   );

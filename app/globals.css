@@ -145,14 +145,31 @@ button, input, select { font: inherit; }
   font-size: clamp(2.5rem, 8vw, 5rem);
 }
 
-.splash-fallback-caption, .splash-loading-label {
+.splash-fallback-caption {
   color: #a4aaa0;
   font-size: 0.65rem;
   letter-spacing: 0.2em;
   text-transform: uppercase;
 }
 
-.splash-loading-label { position: absolute; bottom: max(2rem, env(safe-area-inset-bottom)); }
+.splash-progress-wrap {
+  position: absolute;
+  bottom: max(2rem, env(safe-area-inset-bottom));
+  width: min(72vw, 360px);
+}
+
+.splash-progress-copy {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.65rem;
+  color: #a4aaa0;
+  font-size: 0.62rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.splash-progress-track { height: 2px; overflow: hidden; background: rgba(241, 240, 232, 0.18); }
+.splash-progress-fill { height: 100%; background: #d8ff55; box-shadow: 0 0 12px rgba(216, 255, 85, 0.8); transition: width 80ms linear; }
 
 @keyframes splash-breathe {
   0%, 100% { transform: scale(0.985); opacity: 0.88; }

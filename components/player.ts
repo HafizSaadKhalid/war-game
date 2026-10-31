@@ -22,6 +22,23 @@ export const WORK_COOLDOWN_MS = 60_000;
 export const TRAIN_COOLDOWN_MS = 30_000;
 export const ENERGY_REGEN_INTERVAL_MS = 10_000;
 export const ENERGY_REGEN_AMOUNT = 5;
+export const LEVEL_XP_THRESHOLDS = [0, 100, 250, 450, 700, 1_000, 1_350, 1_750, 2_200, 2_700];
+
+export function getLevelProgress(xp: number) {
+  const levelIndex = LEVEL_XP_THRESHOLDS.findIndex((threshold, index) => {
+    const nextThreshold = LEVEL_XP_THRESHOLDS[index + 1];
+    return xp >= threshold && (nextThreshold === undefined || xp < nextThreshold);
+  });
+  const index = Math.max(0, levelIndex);
+  const currentLevelXp = LEVEL_XP_THRESHOLDS[index];
+  const nextLevelXp = LEVEL_XP_THRESHOLDS[index + 1] ?? currentLevelXp + 500;
+  return {
+    level: index + 1,
+    currentLevelXp,
+    nextLevelXp,
+    progress: Math.min(100, ((xp - currentLevelXp) / (nextLevelXp - currentLevelXp)) * 100),
+  };
+}
 
 export const ROLE_OPTIONS: { value: PlayerRole; icon: string; description: string; specialty: string }[] = [
   { value: "Commander", icon: "⚔️", description: "Lead from the front.", specialty: "Military focus" },
@@ -100,6 +117,7 @@ export function formatCooldown(remainingMs: number): string {
 export const CITIES_BY_COUNTRY: Record<string, string[]> = {
   Pakistan: ["Karachi", "Lahore", "Islamabad", "Peshawar", "Quetta"],
   India: ["Mumbai", "Delhi", "Bengaluru", "Kolkata", "Chennai"],
+  Turkey: ["Istanbul", "Ankara", "Izmir", "Bursa", "Antalya"],
   "Sri Lanka": ["Colombo", "Kandy", "Galle", "Jaffna", "Negombo"],
   Malaysia: ["Kuala Lumpur", "George Town", "Johor Bahru", "Ipoh", "Kota Kinabalu"],
 };

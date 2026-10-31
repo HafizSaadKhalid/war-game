@@ -11,9 +11,9 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Choose a role and city, then use the dashboard to work for gold or train for XP and power. Work has a 60-second cooldown; training has a 30-second cooldown and uses 10 energy. Energy restores by 5 every 10 seconds, up to 100. Businessmen earn an extra 10 gold per work action, and Commanders gain extra power when training.
+Open [http://localhost:3000](http://localhost:3000). The game opens with a seven-second branded splash, followed by local sign-up/log-in. New accounts continue to character setup to choose country, city, and one of four roles. Work adds gold and XP with a 60-second cooldown; training uses 10 energy and grants XP and power with a 30-second cooldown. Energy restores by 5 every 10 seconds, up to 100. Businessmen earn an extra 10 gold per work action, and Commanders gain extra power when training. Level 2 begins at 100 XP and Level 3 at 250 XP.
 
-Profile stats, action cooldown timestamps, and energy recovery progress are saved in browser `localStorage`; they are not shared across browsers or devices. City defense, citizen counts, and other leaderboard representatives are deterministic demo data. There is no backend or live multiplayer sync in this MVP.
+Credentials use salted PBKDF2 hashes, and onboarding state, profile stats, action cooldown timestamps, and energy recovery progress are saved in browser `localStorage`. Accounts are local to the browser and are not server authentication; do not reuse an important password. City defense, citizen counts, and other leaderboard representatives are deterministic demo data. There is no backend or live multiplayer sync in this MVP.
 
 ## Push to GitHub and deploy on Vercel
 

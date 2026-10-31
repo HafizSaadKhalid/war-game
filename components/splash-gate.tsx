@@ -6,11 +6,20 @@ export default function SplashGate({ children }: { children: ReactNode }) {
   const [revealing, setRevealing] = useState(false);
   const [complete, setComplete] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
+  const [progress, setProgress] = useState(0);
 
   useEffect(() => {
-    const revealTimer = window.setTimeout(() => setRevealing(true), 3000);
-    const removeSplashTimer = window.setTimeout(() => setComplete(true), 3700);
+    const startedAt = Date.now();
+    const progressTimer = window.setInterval(() => {
+      setProgress(Math.min(100, Math.floor(((Date.now() - startedAt) / 7000) * 100)));
+    }, 50);
+    const revealTimer = window.setTimeout(() => {
+      setProgress(100);
+      setRevealing(true);
+    }, 7000);
+    const removeSplashTimer = window.setTimeout(() => setComplete(true), 7700);
     return () => {
+      window.clearInterval(progressTimer);
       window.clearTimeout(revealTimer);
       window.clearTimeout(removeSplashTimer);
     };
@@ -40,7 +49,10 @@ export default function SplashGate({ children }: { children: ReactNode }) {
               </div>
             )}
           </div>
-          <span className="splash-loading-label">Preparing the assembly</span>
+          <div className="splash-progress-wrap" aria-live="off">
+            <div className="splash-progress-copy"><span>Preparing the assembly</span><span>{progress}%</span></div>
+            <div className="splash-progress-track"><div className="splash-progress-fill" style={{ width: `${progress}%` }} /></div>
+          </div>
         </div>
       )}
     </>

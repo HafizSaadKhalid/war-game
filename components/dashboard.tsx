@@ -8,12 +8,14 @@ import {
   ENERGY_REGEN_INTERVAL_MS,
   formatCooldown,
   getCityStats,
+  getLevelProgress,
   PLAYER_STORAGE_KEY,
   PlayerProfile,
   restorePlayerProfile,
   TRAIN_COOLDOWN_MS,
   WORK_COOLDOWN_MS,
 } from "@/components/player";
+import { ACTIVE_ACCOUNT_KEY, getActiveAccount, restoreAccountProfile, saveAccountProfile } from "@/components/account-storage";
 
 type LeaderboardEntry = {
   username: string;
@@ -45,14 +47,15 @@ export default function Dashboard() {
   const [now, setNow] = useState(0);
 
   useEffect(() => {
-    const savedProfile = window.localStorage.getItem(PLAYER_STORAGE_KEY);
-    if (!savedProfile) {
+    const account = getActiveAccount();
+    if (!account) {
       router.replace("/");
       return;
     }
 
     try {
-      const restored = restorePlayerProfile(JSON.parse(savedProfile));
+      const savedProfile = window.localStorage.getItem(PLAYER_STORAGE_KEY);
+      const restored = restoreAccountProfile(account) ?? (savedProfile ? restorePlayerProfile(JSON.parse(savedProfile)) : null);
       if (!restored) throw new Error("Invalid saved profile");
       const elapsedIntervals = Math.floor((Date.now() - restored.lastEnergyRegenAt) / ENERGY_REGEN_INTERVAL_MS);
       if (elapsedIntervals > 0) {
@@ -69,7 +72,10 @@ export default function Dashboard() {
   }, [router]);
 
   useEffect(() => {
-    if (player) window.localStorage.setItem(PLAYER_STORAGE_KEY, JSON.stringify(player));
+    if (!player) return;
+    const account = getActiveAccount();
+    if (account) saveAccountProfile(account.username, player);
+    else window.localStorage.setItem(PLAYER_STORAGE_KEY, JSON.stringify(player));
   }, [player]);
 
   useEffect(() => {
@@ -92,6 +98,7 @@ export default function Dashboard() {
   }, [player !== null]);
 
   const leaveAssembly = useCallback(() => {
+    window.localStorage.removeItem(ACTIVE_ACCOUNT_KEY);
     window.localStorage.removeItem(PLAYER_STORAGE_KEY);
     router.replace("/");
   }, [router]);
@@ -99,17 +106,20 @@ export default function Dashboard() {
   function workForCity() {
     if (!player || secondsUntil(player.lastWorkAt, WORK_COOLDOWN_MS, now) > 0) return;
     const reward = player.role === "Businessman" ? 30 : 20;
-    setPlayer({ ...player, gold: player.gold + reward, lastWorkAt: now });
-    setNotice(`+${reward} gold added to your treasury.`);
+    const xp = player.xp + 10;
+    setPlayer({ ...player, gold: player.gold + reward, xp, level: getLevelProgress(xp).level, lastWorkAt: now });
+    setNotice(`+${reward} gold and +10 XP added to your city record.`);
   }
 
   function train() {
     if (!player || player.energy < 10 || secondsUntil(player.lastTrainAt, TRAIN_COOLDOWN_MS, now) > 0) return;
     const powerGain = player.role === "Commander" ? 4 : 2;
+    const xp = player.xp + 15;
     setPlayer({
       ...player,
       energy: player.energy - 10,
-      xp: player.xp + 15,
+      xp,
+      level: getLevelProgress(xp).level,
       power: player.power + powerGain,
       lastTrainAt: now,
       lastEnergyRegenAt: now,
@@ -125,6 +135,7 @@ export default function Dashboard() {
   const trainRemaining = secondsUntil(player.lastTrainAt, TRAIN_COOLDOWN_MS, now);
   const cityStats = getCityStats(player.city);
   const leaderboard = createLeaderboard(player.city, player);
+  const progression = getLevelProgress(player.xp);
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-ink text-paper">
@@ -158,9 +169,13 @@ export default function Dashboard() {
             <section aria-labelledby="profile-heading" className="animate-rise" style={{ animationDelay: "80ms" }}>
               <div className="mb-3 flex items-center justify-between"><h2 id="profile-heading" className="text-xs font-bold uppercase tracking-[0.2em]">Representative file</h2><span className="text-[10px] uppercase tracking-[0.14em] text-muted">Personal stats</span></div>
               <div className="border border-line bg-panel">
+                <div className="border-b border-line bg-signal/5 px-4 py-4 sm:px-5">
+                  <div className="flex items-end justify-between"><div><p className="stat-label">Player level</p><p className="mt-1 font-display text-4xl text-signal">{String(progression.level).padStart(2, "0")}</p></div><div className="text-right"><p className="font-display text-xl">{player.xp} <span className="text-xs text-muted">XP</span></p><p className="mt-1 text-[10px] uppercase tracking-[0.12em] text-muted">{Math.max(0, progression.nextLevelXp - player.xp)} XP to level {progression.level + 1}</p></div></div>
+                  <div className="mt-4 h-2 bg-ink"><div className="h-full bg-signal transition-[width] duration-500" style={{ width: `${progression.progress}%` }} /></div>
+                  <div className="mt-1 flex justify-between text-[9px] text-muted"><span>{progression.currentLevelXp} XP</span><span>{progression.nextLevelXp} XP</span></div>
+                </div>
                 <div className="grid grid-cols-2 border-b border-line"><div className="border-r border-line px-4 py-3"><p className="stat-label">Home city</p><p className="mt-1 text-sm">{player.city}</p></div><div className="px-4 py-3"><p className="stat-label">Office</p><p className="mt-1 text-sm">{player.role}</p></div></div>
                 <div className="grid grid-cols-3 divide-x divide-line"><div className="px-4 py-3"><p className="stat-label">Power</p><p className="mt-1 font-display text-xl">{player.power}</p></div><div className="px-4 py-3"><p className="stat-label">Influence</p><p className="mt-1 font-display text-xl">{player.influence}</p></div><div className="px-4 py-3"><p className="stat-label">Intel</p><p className="mt-1 font-display text-xl">{player.intel}</p></div></div>
-                <div className="border-t border-line px-4 py-3"><div className="mb-2 flex justify-between text-xs"><span className="text-muted">Experience</span><span>{player.xp} XP</span></div><div className="h-1.5 bg-ink"><div className="h-full bg-signal transition-[width]" style={{ width: `${player.xp % 100}%` }} /></div></div>
               </div>
             </section>
 
