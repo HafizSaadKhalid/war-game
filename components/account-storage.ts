@@ -2,6 +2,7 @@ import { PLAYER_STORAGE_KEY, PlayerProfile, restorePlayerProfile } from "@/compo
 
 export const ACCOUNTS_STORAGE_KEY = "represent-your-city-accounts";
 export const ACTIVE_ACCOUNT_KEY = "represent-your-city-active-account";
+export const LOCAL_PROFILE_UPDATED_AT_KEY = "represent-your-city-profile-updated-at";
 
 export type LocalAccount = {
   username: string;
@@ -62,6 +63,7 @@ export function saveAccountProfile(username: string, profile: PlayerProfile) {
   accounts[accountIndex] = { ...accounts[accountIndex], profile };
   saveAccounts(accounts);
   window.localStorage.setItem(PLAYER_STORAGE_KEY, JSON.stringify(profile));
+  window.localStorage.setItem(LOCAL_PROFILE_UPDATED_AT_KEY, String(Date.now()));
 }
 
 export function restoreAccountProfile(account: LocalAccount): PlayerProfile | null {

@@ -11,6 +11,7 @@ import {
   setActiveAccount,
 } from "@/components/account-storage";
 import { PLAYER_STORAGE_KEY } from "@/components/player";
+import { loadPlayerFromSupabase, signInWithSupabase, signOutFromSupabase, signUpWithSupabase } from "@/lib/game-cloud";
 
 type AuthMode = "signup" | "login";
 
@@ -40,8 +41,8 @@ export default function RegistrationForm() {
     event.preventDefault();
     setError("");
     const cleanUsername = username.trim();
-    if (cleanUsername.length < 3 || password.length < 8) {
-      setError("Use a username with at least 3 characters and a password with at least 8.");
+    if (!/^[a-zA-Z0-9._-]{3,24}$/.test(cleanUsername) || password.length < 8) {
+      setError("Use 3–24 letters, numbers, dots, underscores, or hyphens for your username and a password with at least 8 characters.");
       return;
     }
 
@@ -56,6 +57,12 @@ export default function RegistrationForm() {
         }
         const salt = createSalt();
         const passwordHash = await hashPassword(password, salt);
+        const cloudResult = await signUpWithSupabase(cleanUsername, password);
+        if (cloudResult.confirmationRequired) {
+          setError("Supabase created the account but requires email confirmation. Disable email confirmations in Supabase Auth for username-only sign-in, then log in again.");
+          return;
+        }
+        if (!cloudResult.userId) await signOutFromSupabase();
         accounts.push({ username: cleanUsername, salt, passwordHash, profile: null });
         saveAccounts(accounts);
         setActiveAccount(cleanUsername);
@@ -63,13 +70,30 @@ export default function RegistrationForm() {
         return;
       }
 
-      if (!existing || await hashPassword(password, existing.salt) !== existing.passwordHash) {
+      const cloudResult = await signInWithSupabase(cleanUsername, password);
+      const localValid = existing && await hashPassword(password, existing.salt) === existing.passwordHash;
+      if (!cloudResult.userId && !localValid) {
         setError("Username or password is incorrect.");
         return;
       }
-      setActiveAccount(existing.username);
-      const profile = restoreAccountProfile(existing);
+      if (!cloudResult.userId && localValid) await signOutFromSupabase();
+      if (!existing && cloudResult.userId) {
+        const salt = createSalt();
+        accounts.push({ username: cleanUsername, salt, passwordHash: await hashPassword(password, salt), profile: null });
+        saveAccounts(accounts);
+      }
+      const signedInAccount = getAccounts().find((account) => account.username.toLowerCase() === cleanUsername.toLowerCase());
+      if (!signedInAccount) {
+        setError("Could not prepare your local game cache. Please try again.");
+        return;
+      }
+      setActiveAccount(signedInAccount.username);
+      const cloudProfile = cloudResult.userId ? await loadPlayerFromSupabase() : null;
+      const profile = cloudProfile ?? restoreAccountProfile(signedInAccount);
       if (profile) {
+        saveAccounts(getAccounts().map((account) => account.username.toLowerCase() === signedInAccount.username.toLowerCase()
+          ? { ...account, profile }
+          : account));
         window.localStorage.setItem(PLAYER_STORAGE_KEY, JSON.stringify(profile));
         router.push("/dashboard");
       } else {

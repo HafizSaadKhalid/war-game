@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ENERGY_REGEN_AMOUNT,
@@ -21,6 +21,7 @@ import {
 } from "@/components/player";
 import { ACTIVE_ACCOUNT_KEY, getActiveAccount, restoreAccountProfile, saveAccountProfile } from "@/components/account-storage";
 import { getDailyQuests, QuestAction } from "@/components/daily-quests";
+import { loadPlayerFromSupabase, signOutFromSupabase, syncPlayerToSupabase } from "@/lib/game-cloud";
 import DailyQuestList from "@/components/daily-quest-list";
 import TacticalMap from "@/components/tactical-map";
 import type { WorldMapAction } from "@/components/world-map-view";
@@ -114,6 +115,7 @@ export default function Dashboard() {
   const [notice, setNotice] = useState("");
   const [now, setNow] = useState(0);
   const [activeView, setActiveView] = useState<"command" | "world">("command");
+  const localMutationRef = useRef(false);
 
   useEffect(() => {
     const account = getActiveAccount();
@@ -139,6 +141,12 @@ export default function Dashboard() {
       if (restored.energy >= 100) restored.lastEnergyRegenAt = Date.now();
       setPlayer(restored);
       setNow(Date.now());
+      void loadPlayerFromSupabase().then((cloudProfile) => {
+        if (cloudProfile && !localMutationRef.current) {
+          setPlayer(cloudProfile);
+          setNow(Date.now());
+        }
+      });
     } catch {
       window.localStorage.removeItem(PLAYER_STORAGE_KEY);
       router.replace("/");
@@ -150,6 +158,8 @@ export default function Dashboard() {
     const account = getActiveAccount();
     if (account) saveAccountProfile(account.username, player);
     else window.localStorage.setItem(PLAYER_STORAGE_KEY, JSON.stringify(player));
+    const timer = window.setTimeout(() => void syncPlayerToSupabase(player), 900);
+    return () => window.clearTimeout(timer);
   }, [player]);
 
   useEffect(() => {
@@ -177,6 +187,7 @@ export default function Dashboard() {
   }, [player !== null]);
 
   const leaveAssembly = useCallback(() => {
+    void signOutFromSupabase();
     window.localStorage.removeItem(ACTIVE_ACCOUNT_KEY);
     window.localStorage.removeItem(PLAYER_STORAGE_KEY);
     router.replace("/");
@@ -197,6 +208,7 @@ export default function Dashboard() {
       cityLedger: { ...player.cityLedger, [key]: { ...ledger, treasury: ledger.treasury + reward } },
     };
     const result = progressQuests({ ...base, targetCountry: operationPlayer.targetCountry, targetCity: operationPlayer.targetCity }, "work");
+    localMutationRef.current = true;
     setPlayer(result.player);
     setNotice(`+${reward} gold and +10 XP to ${operationPlayer.targetCity}.${result.rewardGold ? ` Quest reward: +${result.rewardGold} gold, +${result.rewardXp} XP.` : ""}`);
     playActionFeedback(getLevelProgress(result.player.xp).level > getLevelProgress(player.xp).level);
@@ -222,6 +234,7 @@ export default function Dashboard() {
       cityLedger: isHomeCity ? player.cityLedger : { ...player.cityLedger, [key]: { ...ledger, defense: Math.max(0, ledger.defense - powerGain) } },
     };
     const result = progressQuests(base, "train");
+    localMutationRef.current = true;
     setPlayer(result.player);
     setNotice(isHomeCity ? `Training complete: +15 XP and +${powerGain} power.` : `Operation against ${operationPlayer.targetCity}: +15 XP, +${powerGain} power; defense disrupted by ${powerGain}.`);
     playActionFeedback(getLevelProgress(result.player.xp).level > getLevelProgress(player.xp).level);
@@ -286,6 +299,7 @@ export default function Dashboard() {
         break;
     }
     const result = progressQuests(base, action, action === "inject" ? 25 : action === "intel" ? 10 : 1);
+    localMutationRef.current = true;
     setPlayer(result.player);
     setNotice(`${noticeText}${result.rewardGold ? ` Quest reward: +${result.rewardGold} gold, +${result.rewardXp} XP.` : ""}`);
     playActionFeedback(getLevelProgress(result.player.xp).level > getLevelProgress(player.xp).level);
@@ -304,6 +318,7 @@ export default function Dashboard() {
       controllingRole: "Politician" as PlayerProfile["role"],
     };
     setPlayer({ ...player, targetCountry: country, targetCity, cityLedger: { ...player.cityLedger, [key]: ledger } });
+    localMutationRef.current = true;
     setNotice(`Operations target set to ${targetCity}, ${country}.`);
     if ("vibrate" in navigator) navigator.vibrate(12);
   }
@@ -329,6 +344,7 @@ export default function Dashboard() {
     const xp = player.xp;
     const base = { ...player, targetCountry: country, targetCity: city, intel: player.intel + 10 };
     const result = progressQuests(base, "intel", 10);
+    localMutationRef.current = true;
     setPlayer(result.player);
     setNotice(`Gathered 10 intel on ${city}.${result.rewardGold ? ` Quest reward: +${result.rewardGold} gold, +${result.rewardXp} XP.` : ""}`);
     playActionFeedback(getLevelProgress(result.player.xp).level > getLevelProgress(xp).level);

@@ -14,6 +14,7 @@ import {
   PlayerRole,
   ROLE_OPTIONS,
 } from "@/components/player";
+import { syncPlayerToSupabase } from "@/lib/game-cloud";
 
 export default function CharacterSetup() {
   const router = useRouter();
@@ -54,6 +55,7 @@ export default function CharacterSetup() {
     }
     const profile = createPlayerProfile({ username: account.username, country, city: cleanCity, role });
     saveAccountProfile(account.username, profile);
+    void syncPlayerToSupabase(profile);
     router.push("/dashboard");
   }
 
