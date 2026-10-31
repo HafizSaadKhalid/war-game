@@ -68,6 +68,17 @@ function HomeBaseCenter({ player }: { player: PlayerProfile }) {
 }
 
 export default function WorldMapView({ player, onAction }: WorldMapViewProps) {
+  function handlePopupAction(
+    event: React.MouseEvent<HTMLButtonElement>,
+    country: string,
+    city: string,
+    action: WorldMapAction,
+  ) {
+    event.preventDefault();
+    event.stopPropagation();
+    onAction(country, city, action);
+  }
+
   return (
     <section className="world-map-shell" aria-label="Interactive world map">
       <div className="world-map-hud">
@@ -100,7 +111,7 @@ export default function WorldMapView({ player, onAction }: WorldMapViewProps) {
               <div className="map-popup-content">
                 <div className="map-popup-heading"><div><p className="map-popup-country">{marker.country}{isHome ? " · HOME BASE" : ""}</p><h3>{marker.city}</h3></div><span className={`map-popup-marker ${isHome ? "home" : ""}`} /></div>
                 <dl className="map-popup-stats"><div><dt>Controlling role</dt><dd>{controllingRole}</dd></div><div><dt>Defense points</dt><dd>{defense}</dd></div><div><dt>Gold treasury</dt><dd>{treasury} G</dd></div></dl>
-                <div className="map-popup-actions"><button type="button" className="map-popup-work" onClick={() => onAction(marker.country, marker.city, "work")}>Work Here</button><button type="button" className="map-popup-attack" onClick={() => onAction(marker.country, marker.city, "attack")}>Attack Base</button><button type="button" className="map-popup-intel" onClick={() => onAction(marker.country, marker.city, "intel")}>Gather Intel</button></div>
+                <div className="map-popup-actions"><button type="button" className="map-popup-work" onClickCapture={(event) => handlePopupAction(event, marker.country, marker.city, "work")}>Work Here</button><button type="button" className="map-popup-attack" onClickCapture={(event) => handlePopupAction(event, marker.country, marker.city, "attack")}>Attack Base</button><button type="button" className="map-popup-intel" onClickCapture={(event) => handlePopupAction(event, marker.country, marker.city, "intel")}>Gather Intel</button></div>
               </div>
             </Popup>
           </Marker>;
