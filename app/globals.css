@@ -4,6 +4,10 @@
 
 :root {
   color-scheme: dark;
+  --war-red: #ff5263;
+  --intel-amber: #ffc257;
+  --economy-green: #75efaa;
+  --tactical-grid: rgba(131, 171, 148, 0.075);
 }
 
 * { box-sizing: border-box; }
@@ -20,10 +24,23 @@ button, input, select { font: inherit; }
 ::selection { background: #d8ff55; color: #101310; }
 
 .bg-grid {
-  background-image: linear-gradient(rgba(216, 255, 85, 0.035) 1px, transparent 1px), linear-gradient(90deg, rgba(216, 255, 85, 0.035) 1px, transparent 1px);
-  background-size: 44px 44px;
+  background-image: linear-gradient(var(--tactical-grid) 1px, transparent 1px), linear-gradient(90deg, var(--tactical-grid) 1px, transparent 1px);
+  background-size: 36px 36px;
   mask-image: linear-gradient(to bottom, black 0%, transparent 90%);
 }
+
+.tactical-scanlines::after {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(to bottom, transparent 0, transparent 3px, rgba(180, 218, 196, 0.025) 4px);
+  content: "";
+}
+
+.text-war { color: var(--war-red); }
+.text-intel { color: var(--intel-amber); }
+.text-economy { color: var(--economy-green); }
 
 .field-label {
   display: block;
@@ -70,6 +87,97 @@ button, input, select { font: inherit; }
 
 .action-tile:hover { border-color: #d8ff55; background: #1b2118; }
 .action-tile:focus-visible { outline: 2px solid #d8ff55; outline-offset: 3px; }
+
+.dashboard-emblem {
+  position: relative;
+  height: clamp(125px, 22vw, 220px);
+  overflow: hidden;
+  border: 1px solid #303830;
+  background: #090d0d;
+}
+
+.dashboard-emblem::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(8, 11, 11, 0.08), rgba(8, 11, 11, 0.52) 54%, #080b0b 100%);
+  content: "";
+}
+
+.dashboard-emblem img { width: 100%; height: 100%; object-fit: cover; object-position: center 45%; opacity: 0.88; }
+.dashboard-emblem-copy { position: absolute; z-index: 2; top: 50%; right: clamp(1rem, 5vw, 3.5rem); max-width: 22rem; transform: translateY(-50%); }
+
+.tactical-panel {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid #38433b;
+  background: rgba(18, 24, 20, 0.92);
+  padding: clamp(1rem, 2.5vw, 1.5rem);
+}
+
+.tactical-panel::after {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(to bottom, transparent 0, transparent 5px, rgba(180, 218, 196, 0.018) 6px);
+  content: "";
+}
+
+.tactical-panel > * { position: relative; z-index: 1; }
+.tactical-kicker { color: var(--intel-amber); font-size: 0.58rem; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; }
+
+.map-board {
+  position: relative;
+  min-height: 340px;
+  overflow: hidden;
+  border: 1px solid #34453a;
+  background-color: #0c1511;
+  background-image: linear-gradient(rgba(117, 239, 170, 0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(117, 239, 170, 0.08) 1px, transparent 1px), radial-gradient(ellipse at 50% 48%, rgba(35, 91, 67, 0.42), transparent 62%);
+  background-size: 28px 28px, 28px 28px, auto;
+}
+
+.map-board::before {
+  position: absolute;
+  top: 17%;
+  left: 6%;
+  width: 66%;
+  height: 67%;
+  border: 1px solid rgba(117, 239, 170, 0.13);
+  border-radius: 48% 35% 55% 40%;
+  background: repeating-linear-gradient(15deg, transparent 0, transparent 31px, rgba(117, 239, 170, 0.08) 32px, transparent 33px), rgba(29, 66, 50, 0.18);
+  box-shadow: 0 0 42px rgba(117, 239, 170, 0.1), inset 0 0 28px rgba(117, 239, 170, 0.08);
+  content: "";
+  transform: rotate(-8deg);
+}
+
+.map-board::after { position: absolute; top: 26%; right: 3%; width: 30%; height: 45%; border: 1px solid rgba(255, 194, 87, 0.16); border-radius: 42% 52% 39% 57%; background: rgba(117, 79, 32, 0.13); content: ""; transform: rotate(12deg); }
+.map-board-label { position: absolute; z-index: 2; top: 0.8rem; left: 0.9rem; right: 0.9rem; display: flex; justify-content: space-between; color: #819187; font-size: 0.52rem; letter-spacing: 0.16em; }
+.map-world-mark { position: absolute; z-index: 2; top: 40%; left: 38%; color: rgba(117, 239, 170, 0.17); font-family: Georgia, serif; font-size: clamp(1.6rem, 5vw, 3.4rem); line-height: 0.9; pointer-events: none; }
+.map-node { position: absolute; z-index: 2; width: 8px; height: 8px; border: 1px solid #08100b; border-radius: 50%; background: var(--economy-green); box-shadow: 0 0 0 5px rgba(117, 239, 170, 0.11), 0 0 16px var(--economy-green); }
+.map-node-one { top: 42%; left: 39%; }.map-node-two { top: 51%; left: 50%; background: var(--war-red); box-shadow: 0 0 0 5px rgba(255, 82, 99, 0.12), 0 0 16px var(--war-red); }.map-node-three { top: 63%; left: 59%; background: var(--intel-amber); box-shadow: 0 0 0 5px rgba(255, 194, 87, 0.12), 0 0 16px var(--intel-amber); }
+.map-region-cards { position: absolute; z-index: 3; inset: 2.5rem 0.75rem 0.75rem; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.5rem; align-items: end; }
+.map-region-card { border: 1px solid rgba(150, 178, 159, 0.28); background: rgba(9, 15, 12, 0.88); padding: 0.65rem; backdrop-filter: blur(4px); }
+.map-region-title { color: #e4e9e2; font-size: 0.65rem; font-weight: 700; }
+.map-influence-track { height: 3px; margin-top: 0.5rem; background: #27332b; }.map-influence-track span { display: block; height: 100%; background: var(--economy-green); box-shadow: 0 0 8px rgba(117, 239, 170, 0.55); }
+.map-region-meta { margin-top: 0.3rem; color: #a4aaa0; font-size: 0.52rem; }
+.map-country-button { border: 1px solid #465449; padding: 0.28rem 0.38rem; color: #aeb8af; font-size: 0.55rem; transition: 150ms ease; }.map-country-button:hover, .map-country-active { border-color: var(--intel-amber); color: var(--intel-amber); background: rgba(255, 194, 87, 0.08); }
+.legend-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; }.legend-green { background: var(--economy-green); box-shadow: 0 0 8px var(--economy-green); }.legend-red { background: var(--war-red); box-shadow: 0 0 8px var(--war-red); }.legend-amber { background: var(--intel-amber); box-shadow: 0 0 8px var(--intel-amber); }
+.map-city-card { border: 1px solid #303b33; background: rgba(9, 14, 11, 0.72); padding: 0.75rem; text-align: left; transition: border-color 150ms ease, background 150ms ease; }.map-city-card:hover, .map-city-selected { border-color: var(--economy-green); background: rgba(43, 82, 58, 0.22); }.map-status-dot { width: 7px; height: 7px; border-radius: 50%; }.map-tone-green { background: var(--economy-green); box-shadow: 0 0 9px var(--economy-green); }.map-tone-red { background: var(--war-red); box-shadow: 0 0 9px var(--war-red); }.map-tone-amber { background: var(--intel-amber); box-shadow: 0 0 9px var(--intel-amber); }
+.map-stat-label, .map-stat-value { display: block; }.map-stat-label { color: #77847a; font-size: 0.48rem; letter-spacing: 0.12em; }.map-stat-value { margin-top: 0.15rem; font-size: 0.67rem; font-weight: 700; }
+
+.quest-card { border: 1px solid #303b33; background: #121813; padding: 1rem; }
+.quest-card-complete { border-color: rgba(117, 239, 170, 0.55); background: rgba(29, 71, 48, 0.16); }
+.quest-progress { height: 3px; background: #263229; }.quest-progress span { display: block; height: 100%; background: var(--intel-amber); transition: width 250ms ease; }.quest-card-complete .quest-progress span { background: var(--economy-green); }
+.quest-action { border: 1px solid rgba(255, 194, 87, 0.5); padding: 0.45rem 0.65rem; color: var(--intel-amber); font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; transition: 150ms ease; }.quest-action:hover:not(:disabled) { background: rgba(255, 194, 87, 0.12); }.quest-action:disabled { cursor: default; opacity: 0.5; }
+.tactical-action { border-color: rgba(255, 82, 99, 0.48); }.tactical-action:hover:not(:disabled) { background: rgba(255, 82, 99, 0.1); color: var(--war-red); }
+
+@media (max-width: 640px) {
+  .map-board { min-height: 470px; }
+  .map-region-cards { grid-template-columns: 1fr; align-content: end; }
+  .map-region-card { padding: 0.5rem; }
+  .map-board::before { width: 75%; height: 52%; }
+  .dashboard-emblem-copy { right: 1rem; }
+}
 
 .app-reveal {
   min-height: 100vh;

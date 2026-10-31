@@ -11,9 +11,9 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). The game opens with a seven-second branded splash, followed by local sign-up/log-in. New accounts continue to character setup to choose country, city, and one of four roles. Work adds gold and XP with a 60-second cooldown; training uses 10 energy and grants XP and power with a 30-second cooldown. Energy restores by 5 every 10 seconds, up to 100. Businessmen earn an extra 10 gold per work action, and Commanders gain extra power when training. Level 2 begins at 100 XP and Level 3 at 250 XP.
+Open [http://localhost:3000](http://localhost:3000). The game opens with a seven-second branded splash, followed by local sign-up/log-in and character setup. On the dashboard, the tactical map drills down from region to country and city; selecting a city sets the target for work, training/attacks, and role quests. Daily quests are tailored to each role and award bonus gold and XP. Work and training retain their cooldowns, and energy regenerates by 5 every 10 seconds up to 100. Level 2 begins at 100 XP and Level 3 at 250 XP.
 
-Credentials use salted PBKDF2 hashes, and onboarding state, profile stats, action cooldown timestamps, and energy recovery progress are saved in browser `localStorage`. Accounts are local to the browser and are not server authentication; do not reuse an important password. City defense, citizen counts, and other leaderboard representatives are deterministic demo data. There is no backend or live multiplayer sync in this MVP.
+Credentials use salted PBKDF2 hashes; onboarding state, profile stats, map targets, city ledger changes, daily quest progress, cooldown timestamps, and energy recovery progress are saved in browser `localStorage`. Accounts are local to the browser and are not server authentication; do not reuse an important password. Regional influence, non-player city data, and leaderboard representatives are deterministic demo data. There is no backend or live multiplayer sync in this MVP. Action feedback uses Web Audio and vibration when the browser supports them.
 
 ## Push to GitHub and deploy on Vercel
 

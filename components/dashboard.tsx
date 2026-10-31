@@ -6,8 +6,11 @@ import { useRouter } from "next/navigation";
 import {
   ENERGY_REGEN_AMOUNT,
   ENERGY_REGEN_INTERVAL_MS,
+  CITIES_BY_COUNTRY,
   formatCooldown,
+  getCityKey,
   getCityStats,
+  getDailyQuestDate,
   getLevelProgress,
   PLAYER_STORAGE_KEY,
   PlayerProfile,
@@ -16,6 +19,9 @@ import {
   WORK_COOLDOWN_MS,
 } from "@/components/player";
 import { ACTIVE_ACCOUNT_KEY, getActiveAccount, restoreAccountProfile, saveAccountProfile } from "@/components/account-storage";
+import { getDailyQuests, QuestAction } from "@/components/daily-quests";
+import DailyQuestList from "@/components/daily-quest-list";
+import TacticalMap from "@/components/tactical-map";
 
 type LeaderboardEntry = {
   username: string;
@@ -40,6 +46,64 @@ function secondsUntil(timestamp: number, cooldown: number, now: number) {
   return Math.max(0, timestamp + cooldown - now);
 }
 
+function playActionFeedback(levelUp = false) {
+  if (typeof window === "undefined") return;
+  if ("vibrate" in navigator) navigator.vibrate(levelUp ? [35, 40, 70] : 18);
+  try {
+    const audio = new AudioContext();
+    const oscillator = audio.createOscillator();
+    const volume = audio.createGain();
+    oscillator.type = "sine";
+    oscillator.frequency.value = levelUp ? 880 : 520;
+    volume.gain.setValueAtTime(0.035, audio.currentTime);
+    volume.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + (levelUp ? 0.38 : 0.14));
+    oscillator.connect(volume);
+    volume.connect(audio.destination);
+    oscillator.start();
+    oscillator.stop(audio.currentTime + (levelUp ? 0.38 : 0.14));
+    oscillator.onended = () => void audio.close();
+  } catch {
+    // Audio feedback is optional; gameplay remains fully available without it.
+  }
+}
+
+function progressQuests(profile: PlayerProfile, action: QuestAction, amount = 1) {
+  let next = { ...profile, dailyQuestProgress: { ...profile.dailyQuestProgress }, completedDailyQuests: [...profile.completedDailyQuests] };
+  let rewardGold = 0;
+  let rewardXp = 0;
+  for (const quest of getDailyQuests(profile.role)) {
+    if (quest.action !== action || next.completedDailyQuests.includes(quest.id)) continue;
+    const progress = Math.min(quest.goal, (next.dailyQuestProgress[quest.id] ?? 0) + amount);
+    next.dailyQuestProgress[quest.id] = progress;
+    if (progress >= quest.goal) {
+      next.completedDailyQuests.push(quest.id);
+      rewardGold += quest.rewardGold;
+      rewardXp += quest.rewardXp;
+    }
+  }
+  if (rewardGold || rewardXp) {
+    next = { ...next, gold: next.gold + rewardGold, xp: next.xp + rewardXp };
+    next.level = getLevelProgress(next.xp).level;
+  }
+  return { player: next, rewardGold, rewardXp };
+}
+
+function withTargetLedger(player: PlayerProfile) {
+  const key = getCityKey(player.targetCountry, player.targetCity);
+  const saved = player.cityLedger[key];
+  if (saved) return { key, ledger: saved };
+  const stats = getCityStats(player.targetCity);
+  return {
+    key,
+    ledger: {
+      treasury: 100 + (stats.seed % 850),
+      defense: stats.defense,
+      influence: 20 + (stats.seed % 70),
+      controllingRole: "Politician" as PlayerProfile["role"],
+    },
+  };
+}
+
 export default function Dashboard() {
   const router = useRouter();
   const [player, setPlayer] = useState<PlayerProfile | null>(null);
@@ -57,6 +121,11 @@ export default function Dashboard() {
       const savedProfile = window.localStorage.getItem(PLAYER_STORAGE_KEY);
       const restored = restoreAccountProfile(account) ?? (savedProfile ? restorePlayerProfile(JSON.parse(savedProfile)) : null);
       if (!restored) throw new Error("Invalid saved profile");
+      if (restored.dailyQuestDate !== getDailyQuestDate()) {
+        restored.dailyQuestDate = getDailyQuestDate();
+        restored.dailyQuestProgress = {};
+        restored.completedDailyQuests = [];
+      }
       const elapsedIntervals = Math.floor((Date.now() - restored.lastEnergyRegenAt) / ENERGY_REGEN_INTERVAL_MS);
       if (elapsedIntervals > 0) {
         restored.energy = Math.min(100, restored.energy + elapsedIntervals * ENERGY_REGEN_AMOUNT);
@@ -82,15 +151,20 @@ export default function Dashboard() {
     if (!player) return;
     const timer = window.setInterval(() => {
       const currentTime = Date.now();
+      const currentQuestDate = getDailyQuestDate(currentTime);
       setNow(currentTime);
       setPlayer((current) => {
-        if (!current || current.energy >= 100) return current;
-        const intervals = Math.floor((currentTime - current.lastEnergyRegenAt) / ENERGY_REGEN_INTERVAL_MS);
-        if (intervals < 1) return current;
+        if (!current) return current;
+        const questReset = current.dailyQuestDate !== currentQuestDate
+          ? { ...current, dailyQuestDate: currentQuestDate, dailyQuestProgress: {}, completedDailyQuests: [] }
+          : current;
+        if (questReset.energy >= 100) return questReset;
+        const intervals = Math.floor((currentTime - questReset.lastEnergyRegenAt) / ENERGY_REGEN_INTERVAL_MS);
+        if (intervals < 1) return questReset;
         return {
-          ...current,
-          energy: Math.min(100, current.energy + intervals * ENERGY_REGEN_AMOUNT),
-          lastEnergyRegenAt: current.lastEnergyRegenAt + intervals * ENERGY_REGEN_INTERVAL_MS,
+          ...questReset,
+          energy: Math.min(100, questReset.energy + intervals * ENERGY_REGEN_AMOUNT),
+          lastEnergyRegenAt: questReset.lastEnergyRegenAt + intervals * ENERGY_REGEN_INTERVAL_MS,
         };
       });
     }, 1000);
@@ -107,15 +181,28 @@ export default function Dashboard() {
     if (!player || secondsUntil(player.lastWorkAt, WORK_COOLDOWN_MS, now) > 0) return;
     const reward = player.role === "Businessman" ? 30 : 20;
     const xp = player.xp + 10;
-    setPlayer({ ...player, gold: player.gold + reward, xp, level: getLevelProgress(xp).level, lastWorkAt: now });
-    setNotice(`+${reward} gold and +10 XP added to your city record.`);
+    const { key, ledger } = withTargetLedger(player);
+    const base = {
+      ...player,
+      gold: player.gold + reward,
+      xp,
+      level: getLevelProgress(xp).level,
+      lastWorkAt: now,
+      cityLedger: { ...player.cityLedger, [key]: { ...ledger, treasury: ledger.treasury + reward } },
+    };
+    const result = progressQuests(base, "work");
+    setPlayer(result.player);
+    setNotice(`+${reward} gold and +10 XP to ${player.targetCity}.${result.rewardGold ? ` Quest reward: +${result.rewardGold} gold, +${result.rewardXp} XP.` : ""}`);
+    playActionFeedback(getLevelProgress(result.player.xp).level > getLevelProgress(player.xp).level);
   }
 
   function train() {
     if (!player || player.energy < 10 || secondsUntil(player.lastTrainAt, TRAIN_COOLDOWN_MS, now) > 0) return;
     const powerGain = player.role === "Commander" ? 4 : 2;
     const xp = player.xp + 15;
-    setPlayer({
+    const { key, ledger } = withTargetLedger(player);
+    const isHomeCity = player.targetCity === player.city && player.targetCountry === player.country;
+    const base: PlayerProfile = {
       ...player,
       energy: player.energy - 10,
       xp,
@@ -123,8 +210,93 @@ export default function Dashboard() {
       power: player.power + powerGain,
       lastTrainAt: now,
       lastEnergyRegenAt: now,
-    });
-    setNotice(`Training complete: +15 XP and +${powerGain} power.`);
+      cityLedger: isHomeCity ? player.cityLedger : { ...player.cityLedger, [key]: { ...ledger, defense: Math.max(0, ledger.defense - powerGain) } },
+    };
+    const result = progressQuests(base, "train");
+    setPlayer(result.player);
+    setNotice(isHomeCity ? `Training complete: +15 XP and +${powerGain} power.` : `Operation against ${player.targetCity}: +15 XP, +${powerGain} power; defense disrupted by ${powerGain}.`);
+    playActionFeedback(getLevelProgress(result.player.xp).level > getLevelProgress(player.xp).level);
+  }
+
+  function performQuestAction(action: QuestAction) {
+    if (!player) return;
+    if (action === "work") return workForCity();
+    if (action === "train") return train();
+    const { key, ledger } = withTargetLedger(player);
+    const isHomeCity = player.targetCity === player.city && player.targetCountry === player.country;
+    if (["intel", "sabotage", "scout"].includes(action) && isHomeCity) {
+      setNotice("Select a different target city for covert operations.");
+      return;
+    }
+
+    let base: PlayerProfile = { ...player };
+    let noticeText = "Objective operation complete.";
+    switch (action) {
+      case "fortify":
+        if (player.gold < 30) return setNotice("You need 30 gold to fortify this city.");
+        base = { ...base, gold: player.gold - 30, cityLedger: { ...player.cityLedger, [key]: { ...ledger, defense: ledger.defense + 12 } } };
+        noticeText = `${player.targetCity} defense reinforced by 12.`;
+        break;
+      case "inject":
+        if (player.gold < 25) return setNotice("You need 25 gold for this treasury investment.");
+        base = { ...base, gold: player.gold - 25, cityLedger: { ...player.cityLedger, [key]: { ...ledger, treasury: ledger.treasury + 25 } } };
+        noticeText = `25 gold invested in ${player.targetCity}'s treasury.`;
+        break;
+      case "campaign":
+        base = { ...base, influence: base.influence + 8, cityLedger: { ...player.cityLedger, [key]: { ...ledger, influence: ledger.influence + 12 } } };
+        noticeText = `Campaign gained support in ${player.targetCity}.`;
+        break;
+      case "influence":
+        if (player.gold < 20) return setNotice("You need 20 gold to lobby for influence.");
+        base = { ...base, gold: player.gold - 20, influence: base.influence + 10, cityLedger: { ...player.cityLedger, [key]: { ...ledger, influence: ledger.influence + 15 } } };
+        noticeText = `${player.targetCity} influence increased by 15.`;
+        break;
+      case "intel":
+        base = { ...base, intel: base.intel + 10 };
+        noticeText = `10 intel gathered on ${player.targetCity}.`;
+        break;
+      case "sabotage":
+        base = { ...base, cityLedger: { ...player.cityLedger, [key]: { ...ledger, defense: Math.max(0, ledger.defense - 15) } } };
+        noticeText = `Sabotage reduced ${player.targetCity} defense by 15.`;
+        break;
+      case "patrol":
+        base = { ...base, power: base.power + 1 };
+        noticeText = `Patrol complete. ${player.targetCity} perimeter secured.`;
+        break;
+      case "market":
+        base = { ...base, intel: base.intel + 5 };
+        noticeText = `Market report complete. +5 intel.`;
+        break;
+      case "address":
+        base = { ...base, influence: base.influence + 5, cityLedger: { ...player.cityLedger, [key]: { ...ledger, influence: ledger.influence + 8 } } };
+        noticeText = `Public address raised ${player.targetCity} influence.`;
+        break;
+      case "scout":
+        base = { ...base, intel: base.intel + 5 };
+        noticeText = `${player.targetCity} scouted. +5 intel.`;
+        break;
+    }
+    const result = progressQuests(base, action, action === "inject" ? 25 : action === "intel" ? 10 : 1);
+    setPlayer(result.player);
+    setNotice(`${noticeText}${result.rewardGold ? ` Quest reward: +${result.rewardGold} gold, +${result.rewardXp} XP.` : ""}`);
+    playActionFeedback(getLevelProgress(result.player.xp).level > getLevelProgress(player.xp).level);
+  }
+
+  function selectTarget(country: string, city: string) {
+    if (!player) return;
+    const targetCity = city || (country === player.targetCountry ? player.targetCity : CITIES_BY_COUNTRY[country]?.[0] ?? "");
+    if (!targetCity) return;
+    const key = getCityKey(country, targetCity);
+    const stats = getCityStats(targetCity);
+    const ledger = player.cityLedger[key] ?? {
+      treasury: 100 + (stats.seed % 850),
+      defense: stats.defense,
+      influence: 20 + (stats.seed % 70),
+      controllingRole: "Politician" as PlayerProfile["role"],
+    };
+    setPlayer({ ...player, targetCountry: country, targetCity, cityLedger: { ...player.cityLedger, [key]: ledger } });
+    setNotice(`Operations target set to ${targetCity}, ${country}.`);
+    if ("vibrate" in navigator) navigator.vibrate(12);
   }
 
   if (!player) {
@@ -136,9 +308,10 @@ export default function Dashboard() {
   const cityStats = getCityStats(player.city);
   const leaderboard = createLeaderboard(player.city, player);
   const progression = getLevelProgress(player.xp);
+  const targetIsEnemy = player.targetCountry !== player.country || player.targetCity !== player.city;
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-ink text-paper">
+    <main className="tactical-scanlines relative min-h-screen overflow-hidden bg-ink text-paper">
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-grid opacity-40" />
       <div className="relative mx-auto flex min-h-screen max-w-7xl flex-col px-5 py-6 sm:px-8 lg:px-12">
         <header className="flex items-center justify-between border-b border-line pb-5">
@@ -151,6 +324,12 @@ export default function Dashboard() {
             <button type="button" onClick={leaveAssembly} className="text-muted transition-colors hover:text-paper">Leave</button>
           </div>
         </header>
+
+        <div className="dashboard-emblem mt-5">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/image-2.png" alt="Global War tactical emblem" />
+          <div className="dashboard-emblem-copy"><p className="tactical-kicker">Global operations / live theater</p><p className="mt-2 font-display text-2xl sm:text-4xl">Represent your city.</p><p className="mt-1 text-[10px] uppercase tracking-[0.16em] text-muted">Hold ground. Build influence. Shape the map.</p></div>
+        </div>
 
         <section className="flex flex-1 flex-col py-8 sm:py-12">
           <div className="flex flex-col justify-between gap-6 border-b border-line pb-7 sm:flex-row sm:items-end">
@@ -183,19 +362,23 @@ export default function Dashboard() {
               <div className="mb-3 flex items-center justify-between"><h2 id="actions-heading" className="text-xs font-bold uppercase tracking-[0.2em]">Available operations</h2><span className="text-[10px] uppercase tracking-[0.14em] text-muted">Energy restores +5 / 10 sec</span></div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <button type="button" onClick={workForCity} disabled={workRemaining > 0} className="action-tile group text-left disabled:cursor-not-allowed disabled:opacity-65">
-                  <span className="flex items-center justify-between"><span className="text-[10px] uppercase tracking-[0.16em] text-signal">⛏ Economy / +{player.role === "Businessman" ? 30 : 20} gold</span><span aria-hidden="true" className="text-xl">→</span></span>
+                  <span className="flex items-center justify-between"><span className="text-[10px] uppercase tracking-[0.16em] text-economy">⛏ Economy / +{player.role === "Businessman" ? 30 : 20} gold</span><span aria-hidden="true" className="text-xl">→</span></span>
                   <span className="mt-8 block font-display text-2xl">Work for City</span>
-                  <span className="mt-2 block text-xs text-muted">{workRemaining > 0 ? `Available in ${formatCooldown(workRemaining)}` : "Earn gold for your city"}</span>
+                  <span className="mt-2 block text-xs text-muted">{workRemaining > 0 ? `Available in ${formatCooldown(workRemaining)}` : `Earn gold for ${player.targetCity}`}</span>
                 </button>
                 <button type="button" onClick={train} disabled={trainRemaining > 0 || player.energy < 10} className="action-tile group text-left disabled:cursor-not-allowed disabled:opacity-65">
-                  <span className="flex items-center justify-between"><span className="text-[10px] uppercase tracking-[0.16em] text-rose-300">⚔ Strategy / -10 energy</span><span aria-hidden="true" className="text-xl">→</span></span>
+                  <span className="flex items-center justify-between"><span className="text-[10px] uppercase tracking-[0.16em] text-war">⚔ {targetIsEnemy ? "Attack operation" : "Training operation"} / -10 energy</span><span aria-hidden="true" className="text-xl">→</span></span>
                   <span className="mt-8 block font-display text-2xl">Attack / Train</span>
-                  <span className="mt-2 block text-xs text-muted">{trainRemaining > 0 ? `Available in ${formatCooldown(trainRemaining)}` : player.energy < 10 ? "Recover energy to train" : "+15 XP and power"}</span>
+                  <span className="mt-2 block text-xs text-muted">{trainRemaining > 0 ? `Available in ${formatCooldown(trainRemaining)}` : player.energy < 10 ? "Recover energy to train" : `Target: ${player.targetCity} · +15 XP and power`}</span>
                 </button>
               </div>
               <p aria-live="polite" className="mt-4 min-h-5 text-sm text-signal">{notice}</p>
             </section>
           </div>
+
+          <div className="mt-7"><DailyQuestList player={player} canWork={workRemaining === 0} canTrain={trainRemaining === 0 && player.energy >= 10} canTargetEnemy={targetIsEnemy} onAction={performQuestAction} /></div>
+
+          <div className="mt-7"><TacticalMap player={player} onSelectTarget={selectTarget} /></div>
 
           <div className="mt-7 grid gap-7 border-t border-line pt-6 lg:grid-cols-[0.85fr_1.15fr]">
             <section aria-labelledby="city-heading" className="animate-rise" style={{ animationDelay: "180ms" }}>

@@ -15,6 +15,19 @@ export type PlayerProfile = {
   lastWorkAt: number;
   lastTrainAt: number;
   lastEnergyRegenAt: number;
+  targetCountry: string;
+  targetCity: string;
+  cityLedger: Record<string, CityLedgerEntry>;
+  dailyQuestDate: string;
+  dailyQuestProgress: Record<string, number>;
+  completedDailyQuests: string[];
+};
+
+export type CityLedgerEntry = {
+  treasury: number;
+  defense: number;
+  influence: number;
+  controllingRole: PlayerRole;
 };
 
 export const PLAYER_STORAGE_KEY = "represent-your-city-player";
@@ -49,6 +62,7 @@ export const ROLE_OPTIONS: { value: PlayerRole; icon: string; description: strin
 
 export function createPlayerProfile(profile: Pick<PlayerProfile, "username" | "country" | "city" | "role">): PlayerProfile {
   const now = Date.now();
+  const homeCityKey = getCityKey(profile.country, profile.city);
   return {
     ...profile,
     gold: 100,
@@ -61,6 +75,19 @@ export function createPlayerProfile(profile: Pick<PlayerProfile, "username" | "c
     lastWorkAt: 0,
     lastTrainAt: 0,
     lastEnergyRegenAt: now,
+    targetCountry: profile.country,
+    targetCity: profile.city,
+    cityLedger: {
+      [homeCityKey]: {
+        treasury: 100,
+        defense: getCityStats(profile.city).defense,
+        influence: profile.role === "Politician" ? 55 : 30,
+        controllingRole: profile.role,
+      },
+    },
+    dailyQuestDate: getDailyQuestDate(now),
+    dailyQuestProgress: {},
+    completedDailyQuests: [],
   };
 }
 
@@ -93,11 +120,53 @@ export function restorePlayerProfile(value: unknown): PlayerProfile | null {
     lastWorkAt: finiteStat(stored.lastWorkAt, 0),
     lastTrainAt: finiteStat(stored.lastTrainAt, 0),
     lastEnergyRegenAt: finiteStat(stored.lastEnergyRegenAt, Date.now()),
+    targetCountry: typeof stored.targetCountry === "string" ? stored.targetCountry : defaults.targetCountry,
+    targetCity: typeof stored.targetCity === "string" ? stored.targetCity : defaults.targetCity,
+    cityLedger: restoreCityLedger(stored.cityLedger, defaults.cityLedger),
+    dailyQuestDate: typeof stored.dailyQuestDate === "string" ? stored.dailyQuestDate : defaults.dailyQuestDate,
+    dailyQuestProgress: restoreQuestProgress(stored.dailyQuestProgress),
+    completedDailyQuests: Array.isArray(stored.completedDailyQuests)
+      ? stored.completedDailyQuests.filter((questId): questId is string => typeof questId === "string")
+      : [],
   };
 }
 
 function finiteStat(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function restoreCityLedger(value: unknown, fallback: Record<string, CityLedgerEntry>): Record<string, CityLedgerEntry> {
+  if (!value || typeof value !== "object") return fallback;
+  const restored: Record<string, CityLedgerEntry> = { ...fallback };
+  for (const [key, entry] of Object.entries(value)) {
+    if (!entry || typeof entry !== "object") continue;
+    const city = entry as Partial<CityLedgerEntry>;
+    restored[key] = {
+      treasury: Math.max(0, finiteStat(city.treasury, 0)),
+      defense: Math.max(0, finiteStat(city.defense, 0)),
+      influence: Math.max(0, finiteStat(city.influence, 0)),
+      controllingRole: ROLE_OPTIONS.some((role) => role.value === city.controllingRole)
+        ? city.controllingRole as PlayerRole
+        : "Politician",
+    };
+  }
+  return restored;
+}
+
+function restoreQuestProgress(value: unknown): Record<string, number> {
+  if (!value || typeof value !== "object") return {};
+  return Object.fromEntries(
+    Object.entries(value).map(([questId, progress]) => [questId, Math.max(0, finiteStat(progress, 0))]),
+  );
+}
+
+export function getCityKey(country: string, city: string): string {
+  return `${country}::${city}`;
+}
+
+export function getDailyQuestDate(timestamp = Date.now()): string {
+  const date = new Date(timestamp);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
 export function getCityStats(city: string) {
