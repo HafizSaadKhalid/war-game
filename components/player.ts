@@ -4,10 +4,16 @@ export type PlayerProfession = "Military Commander" | "Industrialist" | "Politic
 export type PlayerProfile = {
   username: string;
   country: string;
+  countryCode: string;
   city: string;
   homeState: string;
+  stateCode: string;
+  homeLatitude: number | null;
+  homeLongitude: number | null;
   role: PlayerRole;
   profession: PlayerProfession;
+  specialization: string;
+  roleYieldBonusPercent: number;
   professionSelected: boolean;
   gold: number;
   level: number;
@@ -77,6 +83,31 @@ export const PROFESSION_OPTIONS: {
   { value: "Intelligence Agent", gameRole: "Spy", icon: "🕵️", description: "Gather information and operate beyond the front line.", bonus: "Faster intel gathering · covert advantage" },
 ];
 
+export const PROFESSION_SPECIALIZATIONS: Record<PlayerProfession, string[]> = {
+  "Military Commander": ["Air Force", "Ground Forces", "Naval Fleet"],
+  Industrialist: ["Mining & Raw Materials", "Factory Manufacturing", "Power & Energy"],
+  Politician: ["Treasury & Tax Policy", "Diplomacy & Alliances", "Internal Security"],
+  "Intelligence Agent": ["Counter-Intel & Defense", "Sabotage & Recon", "Covert Ops"],
+};
+
+export type RoleDistribution = Record<PlayerProfession, number>;
+export type RoleDemandStatus = "high-demand" | "bonus-active" | "limited-slots";
+
+export function getRoleDemand(distribution: RoleDistribution, profession: PlayerProfession) {
+  const total = Object.values(distribution).reduce((sum, count) => sum + count, 0);
+  const count = distribution[profession] ?? 0;
+  const share = total ? count / total : 0;
+  const needsSupport = total === 0 || count === 0 || share < 0.2;
+  const isOverrepresentedCommander = profession === "Military Commander" && share >= 0.6;
+  const bonusPercent = needsSupport ? 25 : share < 0.35 ? 10 : 5;
+  const status: RoleDemandStatus = isOverrepresentedCommander
+    ? "limited-slots"
+    : bonusPercent >= 25
+      ? "high-demand"
+      : "bonus-active";
+  return { total, count, share, status, bonusPercent, isAvailable: !isOverrepresentedCommander };
+}
+
 export function getProfessionForRole(role: PlayerRole): PlayerProfession {
   return PROFESSION_OPTIONS.find((option) => option.gameRole === role)?.value ?? "Military Commander";
 }
@@ -84,10 +115,15 @@ export function getProfessionForRole(role: PlayerRole): PlayerProfession {
 export function createPlayerProfile(profile: {
   username: string;
   country: string;
+  countryCode?: string;
   homeState?: string;
+  stateCode?: string;
   city: string;
+  homeCoordinates?: { latitude: number; longitude: number } | null;
   role?: PlayerRole;
   profession?: PlayerProfession;
+  specialization?: string;
+  roleYieldBonusPercent?: number;
 }): PlayerProfile {
   const profession = profile.profession ?? getProfessionForRole(profile.role ?? "Commander");
   const role = PROFESSION_OPTIONS.find((option) => option.value === profession)?.gameRole ?? profile.role ?? "Commander";
@@ -96,17 +132,23 @@ export function createPlayerProfile(profile: {
   const homeCityKey = getCityKey(profile.country, profile.city);
   return {
     ...profile,
+    countryCode: profile.countryCode ?? "",
     homeState,
+    stateCode: profile.stateCode ?? "",
+    homeLatitude: profile.homeCoordinates?.latitude ?? null,
+    homeLongitude: profile.homeCoordinates?.longitude ?? null,
     role,
     profession,
+    specialization: profile.specialization ?? PROFESSION_SPECIALIZATIONS[profession][0],
+    roleYieldBonusPercent: profile.roleYieldBonusPercent ?? 0,
     professionSelected: Boolean(profile.profession),
     gold: 100,
     level: 1,
     energy: 100,
     xp: 0,
-    power: profile.role === "Commander" ? 15 : 10,
-    influence: profile.role === "Politician" ? 15 : 10,
-    intel: profile.role === "Spy" ? 15 : 10,
+    power: role === "Commander" ? 15 : 10,
+    influence: role === "Politician" ? 15 : 10,
+    intel: role === "Spy" ? 15 : 10,
     lastWorkAt: 0,
     lastTrainAt: 0,
     lastEnergyRegenAt: now,
@@ -139,12 +181,19 @@ export function restorePlayerProfile(value: unknown): PlayerProfile | null {
   const defaults = createPlayerProfile({
     username: stored.username,
     country: stored.country,
+    countryCode: typeof stored.countryCode === "string" ? stored.countryCode : "",
     homeState: typeof stored.homeState === "string" ? stored.homeState : "",
+    stateCode: typeof stored.stateCode === "string" ? stored.stateCode : "",
     city: stored.city,
     role: stored.role as PlayerRole,
     profession: PROFESSION_OPTIONS.some((option) => option.value === stored.profession)
       ? stored.profession as PlayerProfession
       : getProfessionForRole(stored.role as PlayerRole),
+    specialization: typeof stored.specialization === "string" ? stored.specialization : undefined,
+    roleYieldBonusPercent: finiteStat(stored.roleYieldBonusPercent, 0),
+    homeCoordinates: typeof stored.homeLatitude === "number" && typeof stored.homeLongitude === "number"
+      ? { latitude: stored.homeLatitude, longitude: stored.homeLongitude }
+      : null,
   });
   return {
     ...defaults,
@@ -237,46 +286,3 @@ export function formatCooldown(remainingMs: number): string {
   const seconds = Math.ceil(Math.max(0, remainingMs) / 1000);
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
-
-export const CITIES_BY_COUNTRY: Record<string, string[]> = {
-  Pakistan: ["Karachi", "Lahore", "Islamabad", "Peshawar", "Quetta"],
-  India: ["Mumbai", "Delhi", "Bengaluru", "Kolkata", "Chennai"],
-  Turkey: ["Istanbul", "Ankara", "Izmir", "Bursa", "Antalya"],
-  "Sri Lanka": ["Colombo", "Kandy", "Galle", "Jaffna", "Negombo"],
-  Malaysia: ["Kuala Lumpur", "George Town", "Johor Bahru", "Ipoh", "Kota Kinabalu"],
-};
-
-export const STATES_BY_COUNTRY: Record<string, string[]> = {
-  Pakistan: ["Sindh", "Punjab", "Islamabad Capital Territory", "Khyber Pakhtunkhwa", "Balochistan"],
-  India: ["Maharashtra", "Delhi", "Karnataka", "West Bengal", "Tamil Nadu"],
-  Turkey: ["Istanbul", "Ankara", "Izmir", "Bursa", "Antalya"],
-  "Sri Lanka": ["Western Province", "Central Province", "Southern Province", "Northern Province"],
-  Malaysia: ["Kuala Lumpur", "Penang", "Johor", "Perak", "Sabah"],
-};
-
-export const CITIES_BY_STATE: Record<string, string[]> = {
-  Sindh: ["Karachi", "Hyderabad", "Sukkur"],
-  Punjab: ["Lahore", "Rawalpindi", "Faisalabad", "Multan"],
-  "Islamabad Capital Territory": ["Islamabad"],
-  "Khyber Pakhtunkhwa": ["Peshawar", "Abbottabad", "Mardan"],
-  Balochistan: ["Quetta", "Gwadar", "Turbat"],
-  Maharashtra: ["Mumbai", "Pune", "Nagpur"],
-  Delhi: ["New Delhi", "Delhi"],
-  Karnataka: ["Bengaluru", "Mysuru", "Mangaluru"],
-  "West Bengal": ["Kolkata", "Howrah", "Siliguri"],
-  "Tamil Nadu": ["Chennai", "Coimbatore", "Madurai"],
-  Istanbul: ["Istanbul"],
-  Ankara: ["Ankara"],
-  Izmir: ["Izmir"],
-  Bursa: ["Bursa"],
-  Antalya: ["Antalya"],
-  "Western Province": ["Colombo", "Negombo"],
-  "Central Province": ["Kandy"],
-  "Southern Province": ["Galle"],
-  "Northern Province": ["Jaffna"],
-  "Kuala Lumpur": ["Kuala Lumpur"],
-  Penang: ["George Town"],
-  Johor: ["Johor Bahru"],
-  Perak: ["Ipoh"],
-  Sabah: ["Kota Kinabalu"],
-};

@@ -1,6 +1,7 @@
 "use client";
 
-import { getCityKey, getCityStats, PlayerProfile, CITIES_BY_COUNTRY } from "@/components/player";
+import { useEffect, useState } from "react";
+import { getCityKey, getCityStats, PlayerProfile } from "@/components/player";
 
 type TacticalMapProps = {
   player: PlayerProfile;
@@ -24,7 +25,16 @@ const COUNTRY_TONES: Record<string, string> = {
 export default function TacticalMap({ player, onSelectTarget }: TacticalMapProps) {
   const selectedCountry = player.targetCountry;
   const selectedCity = player.targetCity;
-  const cities = CITIES_BY_COUNTRY[selectedCountry] ?? [];
+  const [cities, setCities] = useState<string[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    void fetch(`/api/locations?${new URLSearchParams({ countryName: selectedCountry })}`)
+      .then((response) => response.json() as Promise<{ cities?: string[] }>)
+      .then((data) => { if (active) setCities((data.cities ?? []).slice(0, 12)); })
+      .catch(() => { if (active) setCities([]); });
+    return () => { active = false; };
+  }, [selectedCountry]);
 
   function getLedger(country: string, city: string) {
     const key = getCityKey(country, city);

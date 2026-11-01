@@ -7,7 +7,6 @@ import { useRouter } from "next/navigation";
 import {
   ENERGY_REGEN_AMOUNT,
   ENERGY_REGEN_INTERVAL_MS,
-  CITIES_BY_COUNTRY,
   formatCooldown,
   getCityKey,
   getCityStats,
@@ -214,7 +213,8 @@ export default function Dashboard() {
   function workForCity(targetCountry = player?.targetCountry, targetCity = player?.targetCity) {
     if (!player || secondsUntil(player.lastWorkAt, WORK_COOLDOWN_MS, now) > 0) return;
     const operationPlayer = { ...player, targetCountry: targetCountry ?? player.targetCountry, targetCity: targetCity ?? player.targetCity };
-    const reward = player.role === "Businessman" ? 30 : 20;
+    const baseReward = player.role === "Businessman" ? 30 : 20;
+    const reward = Math.round(baseReward * (1 + player.roleYieldBonusPercent / 100));
     const xp = player.xp + 10;
     const { key, ledger } = withTargetLedger(operationPlayer);
     const base = {
@@ -323,9 +323,18 @@ export default function Dashboard() {
     playActionFeedback(getLevelProgress(result.player.xp).level > getLevelProgress(player.xp).level);
   }
 
-  function selectTarget(country: string, city: string) {
+  async function selectTarget(country: string, city: string) {
     if (!player) return;
-    const targetCity = city || (country === player.targetCountry ? player.targetCity : CITIES_BY_COUNTRY[country]?.[0] ?? "");
+    let targetCity = city || (country === player.targetCountry ? player.targetCity : "");
+    if (!targetCity) {
+      try {
+        const response = await fetch(`/api/locations?${new URLSearchParams({ countryName: country })}`);
+        const data = await response.json() as { cities?: string[] };
+        targetCity = data.cities?.[0] ?? "";
+      } catch {
+        targetCity = "";
+      }
+    }
     if (!targetCity) return;
     const key = getCityKey(country, targetCity);
     const stats = getCityStats(targetCity);
@@ -442,7 +451,7 @@ export default function Dashboard() {
               <div className="mb-3 flex items-center justify-between"><h2 id="actions-heading" className="text-xs font-bold uppercase tracking-[0.2em]">Available operations</h2><span className="text-[10px] uppercase tracking-[0.14em] text-muted">Energy restores +5 / 10 sec</span></div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <button type="button" onClick={() => workForCity()} disabled={workRemaining > 0} className="action-tile group text-left disabled:cursor-not-allowed disabled:opacity-65">
-                  <span className="flex items-center justify-between"><span className="text-[10px] uppercase tracking-[0.16em] text-economy">⛏ Economy / +{player.role === "Businessman" ? 30 : 20} gold</span><span aria-hidden="true" className="text-xl">→</span></span>
+                  <span className="flex items-center justify-between"><span className="text-[10px] uppercase tracking-[0.16em] text-economy">⛏ Economy / +{Math.round((player.role === "Businessman" ? 30 : 20) * (1 + player.roleYieldBonusPercent / 100))} gold</span><span aria-hidden="true" className="text-xl">→</span></span>
                   <span className="mt-8 block font-display text-2xl">Work for City</span>
                   <span className="mt-2 block text-xs text-muted">{workRemaining > 0 ? `Available in ${formatCooldown(workRemaining)}` : `Earn gold for ${player.targetCity}`}</span>
                 </button>

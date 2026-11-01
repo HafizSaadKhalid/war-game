@@ -1,6 +1,6 @@
 import { getSupabaseClient } from "@/lib/supabaseClient";
 import { getDailyQuests } from "@/components/daily-quests";
-import { getCityKey, PlayerProfile, restorePlayerProfile } from "@/components/player";
+import { getCityKey, PlayerProfile, PROFESSION_OPTIONS, RoleDistribution, restorePlayerProfile } from "@/components/player";
 
 export type CloudAuthResult = {
   userId?: string;
@@ -64,10 +64,17 @@ export async function syncPlayerToSupabase(profile: PlayerProfile): Promise<void
       id: user.id,
       username: profile.username,
       home_country: profile.country,
+      country_code: profile.countryCode,
       home_state: profile.homeState,
+      state_code: profile.stateCode,
       home_city: profile.city,
+      home_latitude: profile.homeLatitude,
+      home_longitude: profile.homeLongitude,
       role: profile.role,
       profession: profile.profession,
+      profession_selected: profile.professionSelected,
+      specialization: profile.specialization,
+      role_yield_bonus_percent: profile.roleYieldBonusPercent,
       level: profile.level,
       xp: profile.xp,
       energy: profile.energy,
@@ -113,6 +120,31 @@ export async function syncPlayerToSupabase(profile: PlayerProfile): Promise<void
   }
 }
 
+export async function fetchCountryRoleDistribution(countryCode: string): Promise<RoleDistribution | null> {
+  const supabase = getSupabaseClient();
+  if (!supabase) return null;
+  try {
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) return null;
+    const { data, error } = await supabase.rpc("get_country_role_distribution", { requested_country_code: countryCode });
+    if (error || !data) return null;
+    const distribution: RoleDistribution = {
+      "Military Commander": 0,
+      Industrialist: 0,
+      Politician: 0,
+      "Intelligence Agent": 0,
+    };
+    for (const row of data as { profession: string; player_count: number }[]) {
+      if (PROFESSION_OPTIONS.some((option) => option.value === row.profession)) {
+        distribution[row.profession as keyof RoleDistribution] = Number(row.player_count) || 0;
+      }
+    }
+    return distribution;
+  } catch {
+    return null;
+  }
+}
+
 export async function loadPlayerFromSupabase(): Promise<PlayerProfile | null> {
   const supabase = getSupabaseClient();
   if (!supabase) return null;
@@ -129,10 +161,18 @@ export async function loadPlayerFromSupabase(): Promise<PlayerProfile | null> {
       ...gameState,
       username: data.username,
       country: data.home_country,
+      countryCode: data.country_code ?? gameState.countryCode,
       homeState: data.home_state ?? gameState.homeState,
+      stateCode: data.state_code ?? gameState.stateCode,
       city: data.home_city,
+      homeCoordinates: typeof data.home_latitude === "number" && typeof data.home_longitude === "number"
+        ? { latitude: data.home_latitude, longitude: data.home_longitude }
+        : null,
       role: data.role,
       profession: data.profession ?? gameState.profession,
+      professionSelected: data.profession_selected ?? gameState.professionSelected,
+      specialization: data.specialization ?? gameState.specialization,
+      roleYieldBonusPercent: data.role_yield_bonus_percent ?? gameState.roleYieldBonusPercent,
       level: data.level,
       xp: data.xp,
       energy: data.energy,

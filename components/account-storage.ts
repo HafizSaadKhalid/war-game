@@ -1,4 +1,4 @@
-import { hasCompletedCharacterSetup, PLAYER_STORAGE_KEY, PlayerProfile, restorePlayerProfile } from "@/components/player";
+import { hasCompletedCharacterSetup, PLAYER_STORAGE_KEY, PlayerProfile, PROFESSION_OPTIONS, RoleDistribution, restorePlayerProfile } from "@/components/player";
 
 export const ACCOUNTS_STORAGE_KEY = "represent-your-city-accounts";
 export const ACTIVE_ACCOUNT_KEY = "represent-your-city-active-account";
@@ -54,6 +54,22 @@ export function getActiveAccount(): LocalAccount | null {
   const username = window.localStorage.getItem(ACTIVE_ACCOUNT_KEY);
   if (!username) return null;
   return getAccounts().find((account) => account.username.toLowerCase() === username.toLowerCase()) ?? null;
+}
+
+export function getLocalRoleDistribution(country: string): RoleDistribution {
+  const distribution: RoleDistribution = {
+    "Military Commander": 0,
+    Industrialist: 0,
+    Politician: 0,
+    "Intelligence Agent": 0,
+  };
+  for (const account of getAccounts()) {
+    const profile = restorePlayerProfile(account.profile);
+    if (!profile || profile.country.toLocaleLowerCase() !== country.toLocaleLowerCase() || !profile.professionSelected) continue;
+    const profession = PROFESSION_OPTIONS.find((option) => option.gameRole === profile.role)?.value;
+    if (profession) distribution[profession] += 1;
+  }
+  return distribution;
 }
 
 export function saveAccountProfile(username: string, profile: PlayerProfile) {
