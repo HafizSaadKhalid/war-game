@@ -171,6 +171,13 @@ button, input, select { font: inherit; }
 .quest-action { border: 1px solid rgba(255, 194, 87, 0.5); padding: 0.45rem 0.65rem; color: var(--intel-amber); font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; transition: 150ms ease; }.quest-action:hover:not(:disabled) { background: rgba(255, 194, 87, 0.12); }.quest-action:disabled { cursor: default; opacity: 0.5; }
 .tactical-action { border-color: rgba(255, 82, 99, 0.48); }.tactical-action:hover:not(:disabled) { background: rgba(255, 82, 99, 0.1); color: var(--war-red); }
 
+.base-building-card { border: 1px solid #303b33; background: rgba(9, 14, 11, 0.72); padding: 1rem; }
+.system-button { min-height: 2.4rem; border: 1px solid rgba(117, 239, 170, 0.45); padding: 0.5rem 0.75rem; color: var(--economy-green); font-size: 0.62rem; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; transition: background 150ms ease, border-color 150ms ease; }
+.system-button:hover:not(:disabled) { border-color: var(--economy-green); background: rgba(117, 239, 170, 0.1); }
+.system-button:disabled { cursor: not-allowed; opacity: 0.4; }
+.system-button.system-danger { border-color: rgba(255, 82, 99, 0.45); color: var(--war-red); }
+.system-button.system-danger:hover:not(:disabled) { border-color: var(--war-red); background: rgba(255, 82, 99, 0.1); }
+
 .dashboard-nav { display: flex; gap: 1.5rem; border-bottom: 1px solid #303830; }
 .dashboard-nav-tab { position: relative; padding: 0.75rem 0.15rem; color: #8d9990; font-size: 0.65rem; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; transition: color 150ms ease; }
 .dashboard-nav-tab:hover, .dashboard-nav-active { color: #e8eee8; }

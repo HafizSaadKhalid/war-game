@@ -7,6 +7,9 @@ import { useRouter } from "next/navigation";
 import {
   ENERGY_REGEN_AMOUNT,
   ENERGY_REGEN_INTERVAL_MS,
+  AttackDomain,
+  BaseBuilding,
+  BuildingType,
   formatCooldown,
   getCityKey,
   getCityStats,
@@ -22,6 +25,8 @@ import {
 import { ACTIVE_ACCOUNT_KEY, getActiveAccount, restoreAccountProfile, saveAccountProfile } from "@/components/account-storage";
 import { getDailyQuests, QuestAction } from "@/components/daily-quests";
 import { loadPlayerFromSupabase, signOutFromSupabase, syncPlayerToSupabase } from "@/lib/game-cloud";
+import GameSystemsPanel from "@/components/game-systems-panel";
+import { ELECTION_CYCLE_MS, getAssetAuctionValue, getBaseDefense, getBuildingCost, getDomainBuildingTypes, getElectionState, getHourlyProduction, getTaxRevenuePerDay } from "@/components/game-systems";
 import DailyQuestList from "@/components/daily-quest-list";
 import TacticalMap from "@/components/tactical-map";
 import type { WorldMapAction } from "@/components/world-map-view";
@@ -114,7 +119,7 @@ export default function Dashboard() {
   const [player, setPlayer] = useState<PlayerProfile | null>(null);
   const [notice, setNotice] = useState("");
   const [now, setNow] = useState(0);
-  const [activeView, setActiveView] = useState<"command" | "world">("command");
+  const [activeView, setActiveView] = useState<"command" | "world" | "systems">("command");
   const localMutationRef = useRef(false);
 
   useEffect(() => {
@@ -190,13 +195,34 @@ export default function Dashboard() {
         const questReset = current.dailyQuestDate !== currentQuestDate
           ? { ...current, dailyQuestDate: currentQuestDate, dailyQuestProgress: {}, completedDailyQuests: [] }
           : current;
-        if (questReset.energy >= 100) return questReset;
-        const intervals = Math.floor((currentTime - questReset.lastEnergyRegenAt) / ENERGY_REGEN_INTERVAL_MS);
-        if (intervals < 1) return questReset;
+        const election = getElectionState(questReset, currentTime);
+        let next = election.shouldReset
+          ? { ...questReset, electionCycleStartedAt: election.cycleStartedAt, electionVotes: 0 }
+          : questReset;
+        const economyElapsed = currentTime - next.lastEconomyTickAt;
+        if (economyElapsed >= 60_000) {
+          const hours = economyElapsed / 3_600_000;
+          const production = Math.floor(getHourlyProduction(next) * hours);
+          next = {
+            ...next,
+            gold: next.gold + production,
+            baseTreasury: next.baseTreasury + production,
+            lastEconomyTickAt: currentTime,
+          };
+        }
+        const taxElapsed = currentTime - next.lastTaxCollectedAt;
+        if (taxElapsed >= 86_400_000) {
+          const days = Math.floor(taxElapsed / 86_400_000);
+          const tax = getTaxRevenuePerDay(next) * days;
+          next = { ...next, baseTreasury: next.baseTreasury + tax, gold: next.gold + tax, lastTaxCollectedAt: next.lastTaxCollectedAt + days * 86_400_000 };
+        }
+        if (next.energy >= 100) return next;
+        const intervals = Math.floor((currentTime - next.lastEnergyRegenAt) / ENERGY_REGEN_INTERVAL_MS);
+        if (intervals < 1) return next;
         return {
-          ...questReset,
-          energy: Math.min(100, questReset.energy + intervals * ENERGY_REGEN_AMOUNT),
-          lastEnergyRegenAt: questReset.lastEnergyRegenAt + intervals * ENERGY_REGEN_INTERVAL_MS,
+          ...next,
+          energy: Math.min(100, next.energy + intervals * ENERGY_REGEN_AMOUNT),
+          lastEnergyRegenAt: next.lastEnergyRegenAt + intervals * ENERGY_REGEN_INTERVAL_MS,
         };
       });
     }, 1000);
@@ -377,6 +403,103 @@ export default function Dashboard() {
     playActionFeedback(getLevelProgress(result.player.xp).level > getLevelProgress(xp).level);
   }
 
+  function buildBaseBuilding(type: BuildingType) {
+    if (!player) return;
+    const cost = getBuildingCost(type);
+    if (player.gold < cost) return setNotice(`You need ${cost} Gold to construct ${type}.`);
+    const nowTime = Date.now();
+    const building: BaseBuilding = { id: crypto.randomUUID(), type, level: 1, damage: 0, builtAt: nowTime, lastActiveAt: nowTime };
+    setPlayer({ ...player, gold: player.gold - cost, baseTreasury: Math.max(0, player.baseTreasury - cost), buildings: [building, ...player.buildings] });
+    localMutationRef.current = true;
+    setNotice(`${type} construction completed. Production is now active.`);
+    playActionFeedback();
+  }
+
+  function repairBuilding(id: string) {
+    if (!player) return;
+    const building = player.buildings.find((entry) => entry.id === id);
+    if (!building || building.damage <= 0) return;
+    const cost = building.damage >= 100 ? Math.round(getBuildingCost(building.type) * 0.8) : Math.max(20, building.damage * 2);
+    if (player.gold < cost) return setNotice(`You need ${cost} Gold to repair/rebuild ${building.type}.`);
+    setPlayer({
+      ...player,
+      gold: player.gold - cost,
+      baseTreasury: Math.max(0, player.baseTreasury - cost),
+      buildings: player.buildings.map((entry) => entry.id === id ? { ...entry, damage: 0, builtAt: entry.damage >= 100 ? Date.now() : entry.builtAt } : entry),
+    });
+    localMutationRef.current = true;
+    setNotice(`${building.type} restored to full integrity. Damage never regenerates on its own.`);
+  }
+
+  function strikeHomeBase(domain: AttackDomain) {
+    if (!player || player.energy < 15) return;
+    const eligible = player.buildings.filter((building) => getDomainBuildingTypes(domain).includes(building.type) && building.damage < 100);
+    const target = eligible[Date.now() % Math.max(1, eligible.length)];
+    const damage = 18 + (Date.now() % 18);
+    const report = { id: crypto.randomUUID(), domain, target: target?.type ?? `${player.city} defenses`, damage, createdAt: Date.now(), covert: false };
+    setPlayer({
+      ...player,
+      energy: player.energy - 15,
+      lastEnergyRegenAt: Date.now(),
+      buildings: target ? player.buildings.map((building) => building.id === target.id ? { ...building, damage: Math.min(100, building.damage + damage) } : building) : player.buildings,
+      warfareReports: [report, ...player.warfareReports].slice(0, 30),
+    });
+    localMutationRef.current = true;
+    setNotice(target ? `${domain} strike hit ${target.type}: ${damage}% permanent damage. Repair or rebuild required.` : `${domain} strike detected. Build a matching asset to defend your base.`);
+    playActionFeedback();
+  }
+
+  function scoutTarget() {
+    if (!player || player.intel < 5) return;
+    const targetKey = getCityKey(player.targetCountry, player.targetCity);
+    const report = { id: crypto.randomUUID(), domain: "Ground" as const, target: player.targetCity, damage: 0, createdAt: Date.now(), covert: true };
+    const ledger = player.cityLedger[targetKey];
+    setPlayer({ ...player, intel: player.intel - 5, warfareReports: [report, ...player.warfareReports].slice(0, 30) });
+    localMutationRef.current = true;
+    setNotice(`Scouting report: ${player.targetCity}, defense ${ledger?.defense ?? getCityStats(player.targetCity).defense}, treasury ${ledger?.treasury ?? 100} Gold.`);
+  }
+
+  function sabotageTarget() {
+    if (!player || player.intel < 10) return;
+    const targetKey = getCityKey(player.targetCountry, player.targetCity);
+    if (player.targetCity === player.city && player.targetCountry === player.country) return setNotice("Select a different city before sabotaging a target.");
+    const existing = player.cityLedger[targetKey] ?? { treasury: 100, defense: getCityStats(player.targetCity).defense, influence: 20, controllingRole: "Politician" as PlayerProfile["role"] };
+    const report = { id: crypto.randomUUID(), domain: "Ground" as const, target: player.targetCity, damage: 15, createdAt: Date.now(), covert: true };
+    setPlayer({ ...player, intel: player.intel - 10, cityLedger: { ...player.cityLedger, [targetKey]: { ...existing, defense: Math.max(0, existing.defense - 15) } }, warfareReports: [report, ...player.warfareReports].slice(0, 30) });
+    localMutationRef.current = true;
+    setNotice(`Sabotage lowered ${player.targetCity} defense by 15. The change is permanent in the city ledger.`);
+  }
+
+  function changeTaxRate(rate: number) {
+    if (!player) return;
+    setPlayer({ ...player, taxRate: Math.max(0, Math.min(50, rate)) });
+    localMutationRef.current = true;
+  }
+
+  function campaignForElection() {
+    if (!player || player.gold < 15) return;
+    const cycle = getElectionState(player);
+    setPlayer({ ...player, gold: player.gold - 15, baseTreasury: Math.max(0, player.baseTreasury - 15), electionCycleStartedAt: cycle.cycleStartedAt, electionVotes: cycle.shouldReset ? 1 : player.electionVotes + (player.role === "Politician" ? 5 : 1) });
+    localMutationRef.current = true;
+    setNotice("Campaign completed. Election votes added to the current 30-day cycle.");
+  }
+
+  function auctionAsset(id: string) {
+    if (!player) return;
+    const building = player.buildings.find((entry) => entry.id === id);
+    if (!building || player.auctionedBuildingIds.includes(id)) return;
+    const proceeds = getAssetAuctionValue(building);
+    setPlayer({ ...player, gold: player.gold + proceeds, baseTreasury: player.baseTreasury + proceeds, auctionedBuildingIds: [...player.auctionedBuildingIds, id] });
+    localMutationRef.current = true;
+    setNotice(`${building.type} sold at auction for ${proceeds} Gold.`);
+  }
+
+  function changeCurrencyScale(scale: number) {
+    if (!player) return;
+    setPlayer({ ...player, currencyScale: Math.max(1, Math.min(100, scale)) });
+    localMutationRef.current = true;
+  }
+
   if (!player) {
     return <main className="grid min-h-screen place-items-center bg-ink text-sm uppercase tracking-[0.16em] text-muted">Loading profile...</main>;
   }
@@ -412,9 +535,27 @@ export default function Dashboard() {
         <nav className="dashboard-nav mt-4" aria-label="Dashboard views">
           <button type="button" className={`dashboard-nav-tab ${activeView === "command" ? "dashboard-nav-active" : ""}`} aria-pressed={activeView === "command"} onClick={() => setActiveView("command")}>Command Overview</button>
           <button type="button" className={`dashboard-nav-tab ${activeView === "world" ? "dashboard-nav-active" : ""}`} aria-pressed={activeView === "world"} onClick={() => setActiveView("world")}>◎ World Map View</button>
+          <button type="button" className={`dashboard-nav-tab ${activeView === "systems" ? "dashboard-nav-active" : ""}`} aria-pressed={activeView === "systems"} onClick={() => setActiveView("systems")}>Base &amp; Governance</button>
         </nav>
 
-        {activeView === "world" ? (
+        {activeView === "systems" ? (
+          <section className="mt-4 flex-1">
+            <GameSystemsPanel
+              player={player}
+              now={now}
+              notice={notice}
+              onBuild={buildBaseBuilding}
+              onRepair={repairBuilding}
+              onStrike={strikeHomeBase}
+              onScout={scoutTarget}
+              onSabotage={sabotageTarget}
+              onTaxRate={changeTaxRate}
+              onVote={campaignForElection}
+              onAuction={auctionAsset}
+              onCurrencyScale={changeCurrencyScale}
+            />
+          </section>
+        ) : activeView === "world" ? (
           <section className="world-map-page mt-4 flex flex-1 flex-col">
             <WorldMapView player={player} onAction={executeMapAction} />
             <p aria-live="polite" className="min-h-6 pt-2 text-sm text-signal">{notice}</p>

@@ -31,6 +31,37 @@ export type PlayerProfile = {
   dailyQuestDate: string;
   dailyQuestProgress: Record<string, number>;
   completedDailyQuests: string[];
+  buildings: BaseBuilding[];
+  baseTreasury: number;
+  taxRate: number;
+  electionCycleStartedAt: number;
+  electionVotes: number;
+  currencyScale: number;
+  warfareReports: WarfareReport[];
+  auctionedBuildingIds: string[];
+  lastEconomyTickAt: number;
+  lastTaxCollectedAt: number;
+};
+
+export type BuildingType = "SAM Missiles" | "Coastal Batteries" | "Land Forts" | "Gold Mines" | "Oil Refineries" | "Power Plants" | "Police HQ";
+export type AttackDomain = "Air" | "Ground" | "Sea";
+
+export type BaseBuilding = {
+  id: string;
+  type: BuildingType;
+  level: number;
+  damage: number;
+  builtAt: number;
+  lastActiveAt: number;
+};
+
+export type WarfareReport = {
+  id: string;
+  domain: AttackDomain;
+  target: string;
+  damage: number;
+  createdAt: number;
+  covert: boolean;
 };
 
 export type CityLedgerEntry = {
@@ -165,6 +196,16 @@ export function createPlayerProfile(profile: {
     dailyQuestDate: getDailyQuestDate(now),
     dailyQuestProgress: {},
     completedDailyQuests: [],
+    buildings: [],
+    baseTreasury: 100,
+    taxRate: 10,
+    electionCycleStartedAt: now,
+    electionVotes: 0,
+    currencyScale: 10,
+    warfareReports: [],
+    auctionedBuildingIds: [],
+    lastEconomyTickAt: now,
+    lastTaxCollectedAt: now,
   };
 }
 
@@ -221,7 +262,41 @@ export function restorePlayerProfile(value: unknown): PlayerProfile | null {
     completedDailyQuests: Array.isArray(stored.completedDailyQuests)
       ? stored.completedDailyQuests.filter((questId): questId is string => typeof questId === "string")
       : [],
+  buildings: Array.isArray(stored.buildings) ? stored.buildings.filter(isBaseBuilding) : [],
+  baseTreasury: Math.max(0, finiteStat(stored.baseTreasury, 100)),
+  taxRate: Math.min(50, Math.max(0, finiteStat(stored.taxRate, 10))),
+  electionCycleStartedAt: finiteStat(stored.electionCycleStartedAt, Date.now()),
+  electionVotes: Math.max(0, finiteStat(stored.electionVotes, 0)),
+  currencyScale: Math.max(1, finiteStat(stored.currencyScale, 10)),
+  warfareReports: Array.isArray(stored.warfareReports) ? stored.warfareReports.filter(isWarfareReport) : [],
+  auctionedBuildingIds: Array.isArray(stored.auctionedBuildingIds)
+    ? stored.auctionedBuildingIds.filter((id): id is string => typeof id === "string")
+    : [],
+    lastEconomyTickAt: finiteStat(stored.lastEconomyTickAt, Date.now()),
+    lastTaxCollectedAt: finiteStat(stored.lastTaxCollectedAt, Date.now()),
   };
+}
+
+function isBaseBuilding(value: unknown): value is BaseBuilding {
+  if (!value || typeof value !== "object") return false;
+  const building = value as Partial<BaseBuilding>;
+  return typeof building.id === "string"
+    && typeof building.type === "string"
+    && typeof building.level === "number"
+    && typeof building.damage === "number"
+    && typeof building.builtAt === "number"
+    && typeof building.lastActiveAt === "number";
+}
+
+function isWarfareReport(value: unknown): value is WarfareReport {
+  if (!value || typeof value !== "object") return false;
+  const report = value as Partial<WarfareReport>;
+  return typeof report.id === "string"
+    && (report.domain === "Air" || report.domain === "Ground" || report.domain === "Sea")
+    && typeof report.target === "string"
+    && typeof report.damage === "number"
+    && typeof report.createdAt === "number"
+    && typeof report.covert === "boolean";
 }
 
 export function hasCompletedCharacterSetup(profile: PlayerProfile | null | undefined): boolean {
