@@ -7,6 +7,7 @@ import {
   CITIES_BY_COUNTRY,
   CITIES_BY_STATE,
   createPlayerProfile,
+  hasCompletedCharacterSetup,
   PLAYER_STORAGE_KEY,
   PlayerProfession,
   PROFESSION_OPTIONS,
@@ -32,12 +33,19 @@ export default function CharacterSetup() {
       return;
     }
     const existingProfile = restoreAccountProfile(account);
-    if (existingProfile) {
+    if (hasCompletedCharacterSetup(existingProfile)) {
       window.localStorage.setItem(PLAYER_STORAGE_KEY, JSON.stringify(existingProfile));
       router.replace("/dashboard?view=world");
       return;
     }
     setUsername(account.username);
+    if (existingProfile) {
+      setCountry(existingProfile.country);
+      setHomeState(existingProfile.homeState);
+      setCity(existingProfile.city);
+      if (existingProfile.professionSelected) setProfession(existingProfile.profession);
+      if (existingProfile.country && existingProfile.homeState && existingProfile.city) setStep(2);
+    }
     setReady(true);
   }, [router]);
 
@@ -61,13 +69,34 @@ export default function CharacterSetup() {
       setError("Choose a starting profession to continue.");
       return;
     }
-    const profile = createPlayerProfile({
+    const previousProfile = restoreAccountProfile(account);
+    const newProfile = createPlayerProfile({
       username: account.username,
       country,
       homeState,
       city: city.trim(),
       profession,
     });
+    const profile = previousProfile ? {
+      ...newProfile,
+      gold: previousProfile.gold,
+      level: previousProfile.level,
+      xp: previousProfile.xp,
+      energy: previousProfile.energy,
+      power: previousProfile.power,
+      influence: previousProfile.influence,
+      intel: previousProfile.intel,
+      lastWorkAt: previousProfile.lastWorkAt,
+      lastTrainAt: previousProfile.lastTrainAt,
+      cityLedger: {
+        ...previousProfile.cityLedger,
+        ...newProfile.cityLedger,
+      },
+      dailyQuestDate: previousProfile.dailyQuestDate,
+      dailyQuestProgress: previousProfile.dailyQuestProgress,
+      completedDailyQuests: previousProfile.completedDailyQuests,
+      professionSelected: true,
+    } : newProfile;
     saveAccountProfile(account.username, profile);
     void syncPlayerToSupabase(profile);
     router.push("/dashboard?view=world");

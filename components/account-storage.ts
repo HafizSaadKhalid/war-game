@@ -1,4 +1,4 @@
-import { PLAYER_STORAGE_KEY, PlayerProfile, restorePlayerProfile } from "@/components/player";
+import { hasCompletedCharacterSetup, PLAYER_STORAGE_KEY, PlayerProfile, restorePlayerProfile } from "@/components/player";
 
 export const ACCOUNTS_STORAGE_KEY = "represent-your-city-accounts";
 export const ACTIVE_ACCOUNT_KEY = "represent-your-city-active-account";
@@ -68,14 +68,16 @@ export function saveAccountProfile(username: string, profile: PlayerProfile) {
 
 export function restoreAccountProfile(account: LocalAccount): PlayerProfile | null {
   const fromAccount = restorePlayerProfile(account.profile);
-  if (fromAccount) return fromAccount;
-
+  let legacy: PlayerProfile | null = null;
   try {
-    const legacy = restorePlayerProfile(JSON.parse(window.localStorage.getItem(PLAYER_STORAGE_KEY) ?? "null"));
-    return legacy?.username.toLowerCase() === account.username.toLowerCase() ? legacy : null;
+    const restored = restorePlayerProfile(JSON.parse(window.localStorage.getItem(PLAYER_STORAGE_KEY) ?? "null"));
+    legacy = restored?.username.toLowerCase() === account.username.toLowerCase() ? restored : null;
   } catch {
-    return null;
+    legacy = null;
   }
+  if (hasCompletedCharacterSetup(fromAccount)) return fromAccount;
+  if (hasCompletedCharacterSetup(legacy)) return legacy;
+  return fromAccount ?? legacy;
 }
 
 function isLocalAccount(value: unknown): value is LocalAccount {

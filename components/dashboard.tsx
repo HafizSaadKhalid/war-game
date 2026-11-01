@@ -13,6 +13,7 @@ import {
   getCityStats,
   getDailyQuestDate,
   getLevelProgress,
+  hasCompletedCharacterSetup,
   PLAYER_STORAGE_KEY,
   PlayerProfile,
   restorePlayerProfile,
@@ -124,14 +125,23 @@ export default function Dashboard() {
   useEffect(() => {
     const account = getActiveAccount();
     if (!account) {
-      router.replace("/");
+      router.replace("/login");
       return;
     }
 
     try {
       const savedProfile = window.localStorage.getItem(PLAYER_STORAGE_KEY);
-      const restored = restoreAccountProfile(account) ?? (savedProfile ? restorePlayerProfile(JSON.parse(savedProfile)) : null);
-      if (!restored) throw new Error("Invalid saved profile");
+      const cachedPlayer = savedProfile ? restorePlayerProfile(JSON.parse(savedProfile)) : null;
+      const matchingCachedPlayer = cachedPlayer?.username.toLowerCase() === account.username.toLowerCase() ? cachedPlayer : null;
+      const restored = restoreAccountProfile(account) ?? matchingCachedPlayer;
+      if (!restored) {
+        router.replace("/setup");
+        return;
+      }
+      if (!hasCompletedCharacterSetup(restored)) {
+        router.replace("/setup");
+        return;
+      }
       if (restored.dailyQuestDate !== getDailyQuestDate()) {
         restored.dailyQuestDate = getDailyQuestDate();
         restored.dailyQuestProgress = {};
@@ -146,6 +156,10 @@ export default function Dashboard() {
       setPlayer(restored);
       setNow(Date.now());
       void loadPlayerFromSupabase().then((cloudProfile) => {
+        if (cloudProfile && !hasCompletedCharacterSetup(cloudProfile)) {
+          router.replace("/setup");
+          return;
+        }
         if (cloudProfile && !localMutationRef.current) {
           setPlayer(cloudProfile);
           setNow(Date.now());
@@ -153,7 +167,7 @@ export default function Dashboard() {
       });
     } catch {
       window.localStorage.removeItem(PLAYER_STORAGE_KEY);
-      router.replace("/");
+      router.replace("/setup");
     }
   }, [router]);
 

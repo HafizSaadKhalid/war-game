@@ -4,13 +4,14 @@ import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   createSalt,
+  ACTIVE_ACCOUNT_KEY,
   getAccounts,
   hashPassword,
   restoreAccountProfile,
   saveAccounts,
   setActiveAccount,
 } from "@/components/account-storage";
-import { PLAYER_STORAGE_KEY } from "@/components/player";
+import { hasCompletedCharacterSetup, PLAYER_STORAGE_KEY } from "@/components/player";
 import { loadPlayerFromSupabase, signInWithSupabase, signOutFromSupabase, signUpWithSupabase } from "@/lib/game-cloud";
 
 type AuthMode = "signup" | "login";
@@ -51,6 +52,8 @@ export default function RegistrationForm({ initialMode = "signup" }: { initialMo
         if (cloudResult.userId) await signOutFromSupabase();
         accounts.push({ username: cleanUsername, salt, passwordHash, profile: null });
         saveAccounts(accounts);
+        window.localStorage.removeItem(ACTIVE_ACCOUNT_KEY);
+        window.localStorage.removeItem(PLAYER_STORAGE_KEY);
         router.push("/login?created=1");
         return;
       }
@@ -80,7 +83,7 @@ export default function RegistrationForm({ initialMode = "signup" }: { initialMo
           ? { ...account, profile }
           : account));
         window.localStorage.setItem(PLAYER_STORAGE_KEY, JSON.stringify(profile));
-        router.push("/dashboard");
+        router.push(hasCompletedCharacterSetup(profile) ? "/dashboard?view=world" : "/setup");
       } else {
         router.push("/setup");
       }

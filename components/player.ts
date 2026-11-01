@@ -8,6 +8,7 @@ export type PlayerProfile = {
   homeState: string;
   role: PlayerRole;
   profession: PlayerProfession;
+  professionSelected: boolean;
   gold: number;
   level: number;
   energy: number;
@@ -98,6 +99,7 @@ export function createPlayerProfile(profile: {
     homeState,
     role,
     profession,
+    professionSelected: Boolean(profile.profession),
     gold: 100,
     level: 1,
     energy: 100,
@@ -147,6 +149,11 @@ export function restorePlayerProfile(value: unknown): PlayerProfile | null {
   return {
     ...defaults,
     ...stored,
+    professionSelected: stored.professionSelected === true
+      && typeof stored.profession === "string"
+      && PROFESSION_OPTIONS.some((option) => option.value === stored.profession)
+      && typeof stored.homeState === "string"
+      && stored.homeState.trim().length > 0,
     gold: finiteStat(stored.gold, defaults.gold),
     energy: Math.min(100, Math.max(0, finiteStat(stored.energy, defaults.energy))),
     level: finiteStat(stored.level, defaults.level),
@@ -166,6 +173,17 @@ export function restorePlayerProfile(value: unknown): PlayerProfile | null {
       ? stored.completedDailyQuests.filter((questId): questId is string => typeof questId === "string")
       : [],
   };
+}
+
+export function hasCompletedCharacterSetup(profile: PlayerProfile | null | undefined): boolean {
+  return Boolean(
+    profile
+    && profile.country.trim()
+    && profile.homeState.trim()
+    && profile.city.trim()
+    && profile.professionSelected
+    && PROFESSION_OPTIONS.some((option) => option.value === profile.profession),
+  );
 }
 
 function finiteStat(value: unknown, fallback: number): number {
