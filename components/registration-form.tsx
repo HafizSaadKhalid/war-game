@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   createSalt,
@@ -15,27 +15,13 @@ import { loadPlayerFromSupabase, signInWithSupabase, signOutFromSupabase, signUp
 
 type AuthMode = "signup" | "login";
 
-export default function RegistrationForm() {
+export default function RegistrationForm({ initialMode = "signup" }: { initialMode?: AuthMode }) {
   const router = useRouter();
-  const [mode, setMode] = useState<AuthMode>("signup");
+  const [mode, setMode] = useState<AuthMode>(initialMode);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    const activeUsername = window.localStorage.getItem("represent-your-city-active-account");
-    if (!activeUsername) return;
-    const account = getAccounts().find((entry) => entry.username.toLowerCase() === activeUsername.toLowerCase());
-    if (!account) return;
-    const profile = restoreAccountProfile(account);
-    if (profile) {
-      window.localStorage.setItem(PLAYER_STORAGE_KEY, JSON.stringify(profile));
-      router.replace("/dashboard");
-    } else {
-      router.replace("/setup");
-    }
-  }, [router]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -62,11 +48,10 @@ export default function RegistrationForm() {
           setError("Supabase created the account but requires email confirmation. Disable email confirmations in Supabase Auth for username-only sign-in, then log in again.");
           return;
         }
-        if (!cloudResult.userId) await signOutFromSupabase();
+        if (cloudResult.userId) await signOutFromSupabase();
         accounts.push({ username: cleanUsername, salt, passwordHash, profile: null });
         saveAccounts(accounts);
-        setActiveAccount(cleanUsername);
-        router.push("/setup");
+        router.push("/login?created=1");
         return;
       }
 
@@ -111,7 +96,7 @@ export default function RegistrationForm() {
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-grid opacity-50" />
       <div className="relative mx-auto flex min-h-screen max-w-7xl flex-col px-5 py-6 sm:px-8 lg:px-12">
         <header className="flex items-center justify-between border-b border-line pb-5">
-          <a className="flex items-center gap-3" href="/" aria-label="Represent Your City home">
+          <a className="flex items-center gap-3" href="/" aria-label="Global War home">
             <span className="grid h-9 w-9 place-items-center border border-signal text-sm font-bold text-signal">RYC</span>
             <span className="text-xs font-bold uppercase tracking-[0.18em]">Global War</span>
           </a>
@@ -131,18 +116,17 @@ export default function RegistrationForm() {
           </div>
 
           <div className="animate-rise border border-line bg-panel p-5 shadow-[0_24px_80px_rgba(0,0,0,0.28)] sm:p-8" style={{ animationDelay: "100ms" }}>
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-signal">Player access / 01</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-signal">{mode === "signup" ? "Account creation / 01" : "Player access / 02"}</p>
             <h2 className="mt-2 font-display text-3xl">{mode === "signup" ? "Create your account" : "Welcome back"}</h2>
-            <div className="mt-6 grid grid-cols-2 border-b border-line" role="tablist" aria-label="Account access">
-              {(["signup", "login"] as const).map((value) => <button key={value} type="button" role="tab" aria-selected={mode === value} onClick={() => { setMode(value); setError(""); }} className={`border-b-2 px-3 py-3 text-xs font-bold uppercase tracking-[0.15em] transition-colors ${mode === value ? "border-signal text-signal" : "border-transparent text-muted hover:text-paper"}`}>{value === "signup" ? "Sign up" : "Log in"}</button>)}
-            </div>
+            <p className="mt-3 text-xs leading-5 text-muted">{mode === "signup" ? "Create your account first. You will sign in before establishing your home base." : "Sign in to continue to your home base setup or resume your campaign."}</p>
             <form onSubmit={handleSubmit} className="mt-6 space-y-5">
               <div><label htmlFor="username" className="field-label">Username</label><input id="username" className="field-input" autoComplete="username" maxLength={24} minLength={3} placeholder="Choose your callsign" value={username} onChange={(event) => setUsername(event.target.value)} required /></div>
               <div><label htmlFor="password" className="field-label">Password</label><input id="password" className="field-input" type="password" autoComplete={mode === "signup" ? "new-password" : "current-password"} minLength={8} placeholder="At least 8 characters" value={password} onChange={(event) => setPassword(event.target.value)} required /></div>
               {error && <p role="alert" className="text-sm text-rose-300">{error}</p>}
               <button type="submit" disabled={busy} className="group flex w-full items-center justify-between bg-signal px-5 py-4 text-left text-sm font-bold text-ink transition-colors hover:bg-paper disabled:cursor-wait disabled:opacity-70"><span>{busy ? "Securing access..." : mode === "signup" ? "Create account" : "Log in"}</span><span aria-hidden="true" className="text-lg transition-transform group-hover:translate-x-1">→</span></button>
-              <p className="text-center text-[11px] leading-5 text-muted">Credentials and game data stay in this browser. Use a unique password.</p>
+              <p className="text-center text-[11px] leading-5 text-muted">Cloud authentication when configured. Offline browser account available as fallback.</p>
             </form>
+            <p className="mt-5 text-center text-xs text-muted">{mode === "signup" ? "Already have an account?" : "New to the world?"} <button type="button" className="font-semibold text-signal hover:text-paper" onClick={() => { const nextMode = mode === "signup" ? "login" : "signup"; setMode(nextMode); setError(""); router.replace(nextMode === "signup" ? "/signup" : "/login"); }}>{mode === "signup" ? "Log in" : "Create account"}</button></p>
           </div>
         </section>
         <footer className="flex justify-between border-t border-line pt-4 text-[10px] uppercase tracking-[0.16em] text-muted"><span>Global War</span><span>Diplomacy is a local affair</span></footer>

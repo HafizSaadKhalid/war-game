@@ -6,7 +6,11 @@ create table if not exists public.profiles (
   id uuid primary key references auth.users (id) on delete cascade,
   username text not null unique,
   home_country text not null default '',
+  home_state text not null default '',
   home_city text not null default '',
+  profession text not null default 'Military Commander' check (profession in ('Military Commander', 'Industrialist', 'Politician', 'Intelligence Agent')),
+  role text not null default 'Commander' check (role in ('Commander', 'Politician', 'Businessman', 'Spy')),
+  level integer not null default 1 check (level >= 1),
   xp integer not null default 0 check (xp >= 0),
   energy integer not null default 100 check (energy between 0 and 100),
   gold integer not null default 100 check (gold >= 0),
@@ -20,6 +24,39 @@ create table if not exists public.profiles (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+-- Additive migration for profiles tables created by earlier MVP schema versions.
+alter table public.profiles add column if not exists home_state text not null default '';
+alter table public.profiles add column if not exists profession text not null default 'Military Commander';
+alter table public.profiles add column if not exists role text not null default 'Commander';
+alter table public.profiles add column if not exists level integer not null default 1;
+
+update public.profiles
+set profession = case role
+  when 'Businessman' then 'Industrialist'
+  when 'Politician' then 'Politician'
+  when 'Spy' then 'Intelligence Agent'
+  else 'Military Commander'
+end
+where profession = 'Military Commander' and role <> 'Commander';
+
+update public.profiles
+set home_state = coalesce(nullif(home_state, ''), game_state ->> 'homeState', '')
+where home_state = '';
+
+update public.profiles
+set role = game_state ->> 'role'
+where game_state ? 'role'
+  and game_state ->> 'role' in ('Commander', 'Politician', 'Businessman', 'Spy');
+
+update public.profiles
+set profession = case role
+  when 'Businessman' then 'Industrialist'
+  when 'Politician' then 'Politician'
+  when 'Spy' then 'Intelligence Agent'
+  else 'Military Commander'
+end
+where profession = 'Military Commander';
 
 create table if not exists public.city_ledgers (
   country text not null,

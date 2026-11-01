@@ -118,6 +118,10 @@ export default function Dashboard() {
   const localMutationRef = useRef(false);
 
   useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("view") === "world") setActiveView("world");
+  }, []);
+
+  useEffect(() => {
     const account = getActiveAccount();
     if (!account) {
       router.replace("/");
@@ -398,7 +402,7 @@ export default function Dashboard() {
             <div className="animate-rise">
               <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.22em] text-signal">City representative / {player.role}</p>
               <h1 className="font-display text-4xl sm:text-6xl">Welcome, <span className="italic text-signal">{player.username}.</span></h1>
-              <p className="mt-3 text-sm text-muted">{player.city}, {player.country} · your seat is ready.</p>
+              <p className="mt-3 text-sm text-muted">{player.city}{player.homeState ? `, ${player.homeState}` : ""}, {player.country} · {player.profession}</p>
             </div>
             <div className="grid grid-cols-2 gap-px border border-line bg-line">
               <div className="min-w-36 bg-panel px-5 py-3"><p className="text-[10px] uppercase tracking-[0.18em] text-muted">Treasury</p><p className="mt-1 font-display text-2xl text-signal">{player.gold} <span className="text-xs">G</span></p></div>
