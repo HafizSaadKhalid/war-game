@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
 import { divIcon } from "leaflet";
 import { getCityKey, getCityStats, PlayerProfile } from "@/components/player";
@@ -86,6 +86,8 @@ function HomeBaseCenter({ player }: { player: PlayerProfile }) {
 }
 
 export default function WorldMapView({ player, onAction }: WorldMapViewProps) {
+  const [useFallbackTiles, setUseFallbackTiles] = useState(false);
+
   function handlePopupAction(
     event: React.MouseEvent<HTMLButtonElement>,
     country: string,
@@ -103,14 +105,19 @@ export default function WorldMapView({ player, onAction }: WorldMapViewProps) {
         <div><p className="tactical-kicker">Global operations / live theater</p><h2 className="mt-1 font-display text-2xl">World Map View</h2><p className="mt-1 text-xs text-muted">Drag to pan · scroll or use controls to zoom · select a base for operations</p></div>
         <div className="world-map-legend"><span><i className="legend-dot legend-green" /> Friendly</span><span><i className="legend-dot legend-red" /> Hostile</span><span><i className="legend-dot legend-amber" /> Intel</span></div>
       </div>
-      <MapContainer center={[20, 0]} zoom={2} minZoom={2} maxZoom={13} scrollWheelZoom zoomControl className="world-map-canvas">
+      <MapContainer center={[20, 0]} zoom={2} minZoom={2} maxZoom={13} scrollWheelZoom zoomControl fadeAnimation={false} className="world-map-canvas">
         <TileLayer
-          attribution='<a href="https://wikimediafoundation.org/wiki/Maps_Terms_of_Use">Wikimedia maps</a> | Map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>'
-          url="https://maps.wikimedia.org/osm-intl/{z}/{x}/{y}.png"
+          attribution={useFallbackTiles
+            ? '<a href="https://wikimediafoundation.org/wiki/Maps_Terms_of_Use">Wikimedia maps</a> | Map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>'
+            : 'Map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a> | Tiles &copy; <a href="https://www.openstreetmap.de/">OpenStreetMap.de</a>'}
+          url={useFallbackTiles
+            ? "https://maps.wikimedia.org/osm-intl/{z}/{x}/{y}.png"
+            : "https://tile.openstreetmap.de/{z}/{x}/{y}.png"}
           maxZoom={19}
           keepBuffer={4}
           updateWhenIdle
           updateWhenZooming={false}
+          eventHandlers={{ tileerror: () => setUseFallbackTiles(true) }}
         />
         <HomeBaseCenter player={player} />
         {CITY_MARKERS.map((marker) => {
